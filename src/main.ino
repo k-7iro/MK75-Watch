@@ -23,8 +23,7 @@ const int ckCenterY = 110;
 const int JST = 32401;
 const String week[7] = {"Sun", "Mon", "Tue", "Wed", "Thr", "Fri", "Sat"};
 
-int count = 0;
-int sd_stats = 0;
+int slpTimer = 0;
 
 void thickLine(M5Canvas target, int x0, int y0, int x1, int y1, int color) {
   target.drawLine(x0, y0, x1, y1, color);
@@ -301,6 +300,10 @@ void loop() {
   updateDigitals();
   updateClock();
   cv_display.pushSprite(0, 0);
-  if (count > 100) {count = 0;}
-  delay(100);                                                                                                         
+  if (!checkGyro()) {
+    if (slpTimer++ >= 100) {
+      M5.Power.deepSleep(1000);
+    }
+  }
+  delay(100);                                                                                                      
 }
