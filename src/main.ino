@@ -174,15 +174,11 @@ String connectHTTP(String url) {
   HTTPClient http;
   String body;
   if (http.begin(client, url)) {
-    Serial.println("HTTPClient begin!");
     http.addHeader("Content-Type", "application/json");
     int responseCode = http.GET();
     body = http.getString();
-    Serial.println(responseCode);
-    Serial.println(body);
     http.end();
   } else {
-    Serial.println("Failed HTTPClient begin!");
     body = "";
   }
   return body;
@@ -276,9 +272,7 @@ bool checkGyro(bool accel) {
   float az = 0;
   M5.Imu.getGyro(&gx, &gy, &gz);
   if (accel) M5.Imu.getAccel(&ax, &ay, &az);
-  Serial.println(gx);
-  Serial.println(((gx > 50) or (ay > 0.9)));
-  return ((gx > 50) or (ay > 0.9));
+  return ((gx > 200)||(ay < -0.8));
 }
 
 void setup() {
@@ -288,39 +282,41 @@ void setup() {
   M5.Power.begin();
   M5.Imu.init();
   Serial.begin(115200);
-  lcd.setBrightness(0);
-  lcd.sleep();
-  if (esp_sleep_get_wakeup_cause() == 0) {
-    
-    lcd.init();
-    lcd.setBrightness(128);
-    setupConfigs();
-    setupSprites();
-  } else {
-    Serial.println("SLP");
-    if (checkGyro(false)) {
-      lcd.init();
-      lcd.setBrightness(128);
-      setupSprites();
-    } else {
-      M5.Power.deepSleep(1000);
-    }
-  }
+  lcd.init();
+  lcd.setBrightness(127);
+  setupConfigs();
+  setupSprites();
+  M5.Power.setLed(255);
 }
 
 void loop() {
   M5.update();
   cv_display.clear();
+  if (!((checkGyro(true))&&(M5.Touch.getCount() > 0)&&(M5.Power.isCharging()))) {
+    if (slpTimer++ >= 100) {
+      int touch = 0;
+      int light = false;
+      lcd.clear();
+      lcd.setBrightness(0);
+      lcd.sleep();
+      while (!((checkGyro(false))||(touch > 0)||(M5.Power.isCharging()))) {
+        M5.Power.lightSleep(1000000);
+        M5.update();
+        lcd.wakeup();
+        light = abs(255-light);
+        M5.Power.setLed(light);
+        touch = M5.Touch.getCount();
+      }
+      lcd.wakeup();
+      lcd.setBrightness(127);
+      M5.Power.setLed(255);
+      slpTimer = 0;
+    }
+  } else {
+    slpTimer = 0;
+  }
   updateDigitals();
   updateClock();
   cv_display.pushSprite(0, 0);
-  if (!checkGyro(true)) {
-    if (slpTimer++ >= 100) {
-      M5.Power.setVibration(100);
-      delay(500);
-      M5.Power.setVibration(0);
-      M5.Power.deepSleep(1000);
-    }
-  }
   delay(100);                                                                                                      
 }
