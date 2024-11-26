@@ -267,8 +267,18 @@ void setupSprites() {
   cv_day.createSprite(sizeX, 55);
 }
 
-bool checkGyro() {
-  return true;
+bool checkGyro(bool accel) {
+  float gx = 0;
+  float gy = 0;
+  float gz = 0;
+  float ax = 0;
+  float ay = 0;
+  float az = 0;
+  M5.Imu.getGyro(&gx, &gy, &gz);
+  if (accel) M5.Imu.getAccel(&ax, &ay, &az);
+  Serial.println(gx);
+  Serial.println(((gx > 50) or (ay > 0.9)));
+  return ((gx > 50) or (ay > 0.9));
 }
 
 void setup() {
@@ -276,15 +286,19 @@ void setup() {
   cfg.internal_imu = true;
   M5.begin(cfg);
   M5.Power.begin();
+  M5.Imu.init();
+  Serial.begin(115200);
+  lcd.setBrightness(0);
+  lcd.sleep();
   if (esp_sleep_get_wakeup_cause() == 0) {
-    Serial.begin(115200);
+    
     lcd.init();
     lcd.setBrightness(128);
     setupConfigs();
     setupSprites();
   } else {
-    if (checkGyro()) {
-      Serial.begin(115200);
+    Serial.println("SLP");
+    if (checkGyro(false)) {
       lcd.init();
       lcd.setBrightness(128);
       setupSprites();
@@ -300,8 +314,11 @@ void loop() {
   updateDigitals();
   updateClock();
   cv_display.pushSprite(0, 0);
-  if (!checkGyro()) {
+  if (!checkGyro(true)) {
     if (slpTimer++ >= 100) {
+      M5.Power.setVibration(100);
+      delay(500);
+      M5.Power.setVibration(0);
       M5.Power.deepSleep(1000);
     }
   }
