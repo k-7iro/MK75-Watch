@@ -14,6 +14,8 @@ static M5Canvas cv_day(&cv_clock);
 static M5Canvas cv_ckhhand(&cv_clock);
 static M5Canvas cv_ckmhand(&cv_clock);
 
+JsonDocument config;
+
 const int sizeX = 320;
 const int centerX = 160;
 const int sizeY = 240;
@@ -24,6 +26,9 @@ const int JST = 32401;
 const String week[7] = {"Sun", "Mon", "Tue", "Wed", "Thr", "Fri", "Sat"};
 
 int slpTimer = 0;
+int vibTimer = 0;
+
+bool wasVBUS = false;
 
 void thickLine(M5Canvas target, int x0, int y0, int x1, int y1, int color) {
   target.drawLine(x0, y0, x1, y1, color);
@@ -85,7 +90,7 @@ void updateClock() {
   uint8_t bat = M5.Power.getBatteryLevel();
   auto dt = M5.Rtc.getDateTime();
   cv_ckbase.pushSprite(&cv_clock, 0, 0);
-  if (M5.Power.isCharging()) {
+  if (M5.Power.Axp2101.isVBUS()) {
     cv_clock.fillArc(ckCenterX, ckCenterY, 110, 108, 270, (bat*3.6)-90.5, CYAN);
   } else {
     cv_clock.fillArc(ckCenterX, ckCenterY, 110, 108, 270, (bat*3.6)-90.5, batcolor(bat));
@@ -104,7 +109,7 @@ void updateDigitals() {
   cv_dtime_bat.setTextColor(WHITE, BLACK);
   cv_dtime_bat.drawString(force2digits(dt.time.hours)+":"+force2digits(dt.time.minutes), 1, 1, &fonts::Font4);
   cv_dtime_bat.drawString(force2digits(dt.time.seconds), 1, 27, &fonts::Font4);
-  if (M5.Power.isCharging()) { cv_dtime_bat.setTextColor(GREEN, BLACK); }
+  if (M5.Power.Axp2101.isVBUS()) { cv_dtime_bat.setTextColor(CYAN, BLACK); }
   cv_dtime_bat.drawRightString(String(bat)+"%", sizeX, 1, &fonts::Font4);
   cv_dtime_bat.pushSprite(&cv_display, 1, 1, BLACK);
   cv_day.clear();
@@ -114,30 +119,33 @@ void updateDigitals() {
   cv_day.pushSprite(&cv_display, 1, sizeY-55, BLACK);
 }
 
-JsonDocument readSDJson(String filename) {
-  if (SD.begin(4)){
-    File file = SD.open(filename);
+String readSDJson(String filename) {
+  if (SD.begin(4, SPI)){
+    File file = SD.open(filename, FILE_READ);
     if (file) {
       String jsoncfg;
       while (file.available()) {
         jsoncfg = file.readString();
       }
       file.close();
-      JsonDocument doc;
+      Serial.println(jsoncfg);
       int len = jsoncfg.length() + 1;
       char jsonca[len];
       jsoncfg.toCharArray(jsonca, len);
-      DeserializationError error = deserializeJson(doc, jsonca);
-      if (!error) {
-        return doc;
+      DeserializationError error = deserializeJson(config, jsonca);
+      if (error) {
+        return "JSON Error";
       }
+      return "";
     }
+    return "Config file isn't found";
   }
+  return "SD isn't found or broken";
 }
 
-bool conectWiFi(JsonDocument config) {
-  if (config["wifi"]["ssid"]) {
-    for (JsonPair kv : config["wifi"]["ssid"].as<JsonObject>()) {
+bool conectWiFi(JsonDocument conf) {
+  if (conf["wifi"]["ssid"]) {
+    for (JsonPair kv : conf["wifi"]["ssid"].as<JsonObject>()) {
       String pass = kv.value();
       int len = pass.length() + 1;
       char passca[len];
@@ -208,23 +216,21 @@ void setupConfigs() {
     lcd.println("failed");
   }
   lcd.println(SD.cardType());
-  /*
   lcd.print("settings read...");
-  JsonDocument json = readSDJson("/settings.json");
-  if (!json.isNull()) {
+  String SDResult = readSDJson("/settings.json");
+  if (SDResult == "") {
     lcd.println("success");
     if (WiFi.status() != WL_CONNECTED) {
       lcd.print("wifi from json connect...");
-      if (conectWiFi(json)) {
+      if (conectWiFi(config)) {
         lcd.println("success");
       } else {
         lcd.println("failed");
       }
     }
   } else {
-    lcd.println("failed");
+    lcd.println(SDResult);
   }
-  */
   if (WiFi.status() == WL_CONNECTED) {
     lcd.print("change time...");
     int timerStart = millis();
@@ -263,16 +269,12 @@ void setupSprites() {
   cv_day.createSprite(sizeX, 55);
 }
 
-bool checkGyro(bool accel) {
-  float gx = 0;
-  float gy = 0;
-  float gz = 0;
+bool checkGyro() {
   float ax = 0;
   float ay = 0;
   float az = 0;
-  M5.Imu.getGyro(&gx, &gy, &gz);
-  if (accel) M5.Imu.getAccel(&ax, &ay, &az);
-  return ((gx > 200)||(ay < -0.8));
+  M5.Imu.getAccel(&ax, &ay, &az);
+  return ((az > -0.75) and (ay > -0.75) and (ay < 0.75) and (ax > -0.75) and (ax < 0.75));
 }
 
 void setup() {
@@ -287,25 +289,27 @@ void setup() {
   setupConfigs();
   setupSprites();
   M5.Power.setLed(255);
+  wasVBUS = M5.Power.Axp2101.isVBUS();
 }
 
 void loop() {
   M5.update();
   cv_display.clear();
-  if (!((checkGyro(true))&&(M5.Touch.getCount() > 0)&&(M5.Power.isCharging()))) {
-    if (slpTimer++ >= 100) {
+  if (!((checkGyro() and (!M5.Power.Axp2101.isVBUS())) or (M5.Touch.getCount() > 0) or (vibTimer > 0))) {
+    if (slpTimer++ >= 50) {
       int touch = 0;
       int light = false;
+      bool charged = M5.Power.Axp2101.isVBUS();
       lcd.clear();
       lcd.setBrightness(0);
       lcd.sleep();
-      while (!((checkGyro(false))||(touch > 0)||(M5.Power.isCharging()))) {
-        M5.Power.lightSleep(1000000);
+      while (!((checkGyro() and (!M5.Power.Axp2101.isVBUS())) or (touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
+        M5.Power.lightSleep(2500000);
+        delayMicroseconds(1);
         M5.update();
-        lcd.wakeup();
+        touch = M5.Touch.getCount();
         light = abs(255-light);
         M5.Power.setLed(light);
-        touch = M5.Touch.getCount();
       }
       lcd.wakeup();
       lcd.setBrightness(127);
@@ -315,6 +319,16 @@ void loop() {
   } else {
     slpTimer = 0;
   }
+  if (vibTimer > 0) {
+    M5.Power.setVibration(127);
+    vibTimer--;
+  } else {
+    M5.Power.setVibration(0);
+  }
+  if ((!wasVBUS) and M5.Power.Axp2101.isVBUS()) {
+    vibTimer = 2;
+  }
+  wasVBUS = M5.Power.Axp2101.isVBUS();
   updateDigitals();
   updateClock();
   cv_display.pushSprite(0, 0);
