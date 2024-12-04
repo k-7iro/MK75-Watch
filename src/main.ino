@@ -5,9 +5,9 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
-static M5GFX lcd;
-static M5Canvas cv_display(&lcd);
+static M5Canvas cv_display(&M5.Display);
 static M5Canvas cv_clock(&cv_display);
+static M5Canvas cv_menu(&cv_display);
 static M5Canvas cv_ckbase(&cv_display);
 static M5Canvas cv_dtime_bat(&cv_clock);
 static M5Canvas cv_day(&cv_clock);
@@ -24,9 +24,18 @@ const int ckCenterX = 110;
 const int ckCenterY = 110;
 const int JST = 32401;
 const String week[7] = {"Sun", "Mon", "Tue", "Wed", "Thr", "Fri", "Sat"};
+String M5Model;
 
 int slpTimer = 0;
 int vibTimer = 0;
+int screenSwipe = 0;
+int prevTX = 0;
+int prevTY = 0;
+int cycle = 0;
+int prevLoopTime = 0;
+int prevSwipeAcc_1 = 0;
+int prevSwipeAcc_2 = 0;
+int prevSwipeAcc_3 = 0;
 
 bool wasVBUS = false;
 
@@ -38,6 +47,12 @@ void thickLine(M5Canvas target, int x0, int y0, int x1, int y1, int color) {
   target.drawLine(x0, y0-1, x1, y1-1, color);
 }
 
+int limit(int num, int min, int max) {
+  if (num < min) return min;
+  else if (num > max) return max;
+  return num;
+}
+
 uint32_t batcolor(int bat) {
   float r, g;
   if (bat <= 50) {
@@ -47,7 +62,7 @@ uint32_t batcolor(int bat) {
     r = ((100-bat)*255)/50;
     g = 255;
   }
-  return lcd.color888((u_int8_t) r, (u_int8_t) g, 0);
+  return M5.Display.color888((u_int8_t) r, (u_int8_t) g, 0);
 }
 
 String force2digits(int num) {
@@ -99,7 +114,6 @@ void updateClock() {
   cv_ckhhand.pushRotated(&cv_clock, (180+((dt.time.hours*30)+(dt.time.minutes/2)))%360);
   cv_ckmhand.setPivot(1, 1);
   cv_ckmhand.pushRotated(&cv_clock, (180+((dt.time.minutes*6)+(dt.time.seconds/10)))%360);
-  cv_clock.pushSprite(&cv_display, centerX-ckCenterX, centerY-ckCenterY, BLACK);
 }
 
 void updateDigitals() {
@@ -107,16 +121,15 @@ void updateDigitals() {
   auto dt = M5.Rtc.getDateTime();
   cv_dtime_bat.clear();
   cv_dtime_bat.setTextColor(WHITE, BLACK);
-  cv_dtime_bat.drawString(force2digits(dt.time.hours)+":"+force2digits(dt.time.minutes), 1, 1, &fonts::Font4);
-  cv_dtime_bat.drawString(force2digits(dt.time.seconds), 1, 27, &fonts::Font4);
+  cv_dtime_bat.drawString(force2digits(dt.time.hours)+":"+force2digits(dt.time.minutes)+" "+force2digits(dt.time.seconds), 1, 0, &fonts::Font2);
   if (M5.Power.Axp2101.isVBUS()) { cv_dtime_bat.setTextColor(CYAN, BLACK); }
-  cv_dtime_bat.drawRightString(String(bat)+"%", sizeX, 1, &fonts::Font4);
-  cv_dtime_bat.pushSprite(&cv_display, 1, 1, BLACK);
+  cv_dtime_bat.drawRightString(String(bat)+"%", sizeX, 0, &fonts::Font2);
   cv_day.clear();
   cv_day.setTextColor(WHITE, BLACK);
-  cv_day.drawString(String(dt.date.month)+"/"+String(dt.date.date), 1, 1, &fonts::Font4);
-  cv_day.drawString(week[dt.date.weekDay]+" '"+force2digits(dt.date.year%100), 1, 27, &fonts::Font4);
-  cv_day.pushSprite(&cv_display, 1, sizeY-55, BLACK);
+  cv_day.drawString(String(dt.date.month)+"/"+String(dt.date.date)+" "+week[dt.date.weekDay]+" "+dt.date.year, 1, 1, &fonts::Font2);
+  int ramFree = (int) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
+  int ramTotal = (int) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
+  cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB", sizeX, 1, &fonts::Font2);
 }
 
 String readSDJson(String filename) {
@@ -209,32 +222,44 @@ void setRTCFromUNIX(time_t unixTime) {
 }
 
 void setupConfigs() {
-  lcd.print("wifi from saved connect...");
-  if (connectWiFi()) {
-    lcd.println("success");
+  M5Model = getModel();
+  M5.Display.println("MK75-Watch");
+  M5.Display.print("Model: ");
+  if (M5Model == "M5StackCore2") {
+    M5.Display.setTextColor(GREEN, BLACK);
+    M5.Display.println(M5Model);
+    M5.Display.println("Supported Model");
   } else {
-    lcd.println("failed");
+    M5.Display.setTextColor(RED, BLACK);
+    M5.Display.println(M5Model);
+    M5.Display.println("Unsupported Model");
   }
-  lcd.println(SD.cardType());
-  lcd.print("settings read...");
+  M5.Display.setTextColor(WHITE, BLACK);
+  M5.Display.print("wifi from saved connect...");
+  if (connectWiFi()) {
+    M5.Display.println("success");
+  } else {
+    M5.Display.println("failed");
+  }
+  M5.Display.println(SD.cardType());
+  M5.Display.print("settings read...");
   String SDResult = readSDJson("/settings.json");
   if (SDResult == "") {
-    lcd.println("success");
+    M5.Display.println("success");
     if (WiFi.status() != WL_CONNECTED) {
-      lcd.print("wifi from json connect...");
+      M5.Display.print("wifi from json connect...");
       if (conectWiFi(config)) {
-        lcd.println("success");
+        M5.Display.println("success");
       } else {
-        lcd.println("failed");
+        M5.Display.println("failed");
       }
     }
   } else {
-    lcd.println(SDResult);
+    M5.Display.println(SDResult);
   }
   if (WiFi.status() == WL_CONNECTED) {
-    lcd.print("change time...");
-    int timerStart = millis();
-    int timerEnd;
+    M5.Display.print("change time...");
+    int tmrStart = millis();
     String timeResp = connectHTTP("http://worldtimeapi.org/api/timezone/Japan");
     if (timeResp != "") {
       JsonDocument timeRespJSON;
@@ -243,30 +268,40 @@ void setupConfigs() {
       timeResp.toCharArray(timeRespCA, len);
       DeserializationError error = deserializeJson(timeRespJSON, timeRespCA);
       if (error) {
-        lcd.println("failed");
+        M5.Display.println("failed");
       } else {
         int time = timeRespJSON["unixtime"];
-        timerEnd = millis();
-        setRTCFromUNIX(time+JST+ceil((timerEnd-timerStart)/2000));
-        lcd.println("success");
+        setRTCFromUNIX(time+JST+ceil((millis()-tmrStart)/2000));
+        M5.Display.println("success");
       }
     } else {
-      lcd.println("failed");
+      M5.Display.println("failed");
     }
   } else {
-    lcd.println("can't set time");
+    M5.Display.println("can't set time");
   }
   WiFi.disconnect(true);
   delay(1000);
-  lcd.clear();
+  M5.Display.clear();
 }
 
 void setupSprites() {
   cv_display.createSprite(sizeX, sizeY);
   cv_clock.createSprite(220, 220);
+  cv_menu.createSprite(320, 220);
   makeClockBase();
-  cv_dtime_bat.createSprite(sizeX, 55);
-  cv_day.createSprite(sizeX, 55);
+  cv_dtime_bat.createSprite(sizeX, 17);
+  cv_day.createSprite(sizeX, 17);
+}
+
+void setupMenu() {
+  cv_menu.setFont(&lgfxJapanMincho_40);
+  for (int ix = -1; ix < 2; ix++) {
+    for (int iy = 0; iy < 2; iy++) {
+      cv_menu.fillRect(((ix*105)-50)+(sizeX/2), ((iy*85)-85)+(sizeY/2), 100, 80, WHITE);
+      cv_menu.fillRect(((ix*105)-47)+(sizeX/2), ((iy*85)-82)+(sizeY/2), 94, 74, BLACK);
+    }
+  }
 }
 
 bool checkGyro() {
@@ -274,7 +309,95 @@ bool checkGyro() {
   float ay = 0;
   float az = 0;
   M5.Imu.getAccel(&ax, &ay, &az);
-  return ((az > -0.75) and (ay > -0.75) and (ay < 0.75) and (ax > -0.75) and (ax < 0.75));
+  return ((az > 0.95) and (abs(ay) < 0.75) and (abs(ax) < 0.75));
+}
+
+void loopTouch(int touch) {
+  if (touch) {
+    Serial.print("Hold: "); Serial.print(prevSwipeAcc_1); Serial.print(" "); Serial.print(prevSwipeAcc_2); Serial.print(" "); Serial.println(prevSwipeAcc_3);
+    auto detail = M5.Touch.getDetail();
+    if (prevTX != -1) {
+      screenSwipe += prevTX-detail.x;
+      prevSwipeAcc_3 = prevSwipeAcc_2;
+      prevSwipeAcc_2 = prevSwipeAcc_1;
+      prevSwipeAcc_1 = prevTX-detail.x;
+    }
+    prevTX = detail.x;
+    prevTY = detail.y;
+  } else {
+    if (screenSwipe < 0) {
+      screenSwipe += (0-screenSwipe)/2;
+      screenSwipe = round(screenSwipe);
+      if (abs(screenSwipe) <= 1) screenSwipe = 0;
+    } else if (screenSwipe > 320) {
+      screenSwipe += (320-screenSwipe)/2;
+      screenSwipe = round(screenSwipe);
+      if (abs(screenSwipe-320) <= 1) screenSwipe = 320;
+    } else if (screenSwipe % 320 != 0) {
+      int calib = limit(prevSwipeAcc_3*3, -160, 160);
+      int target = limit(round(((float) (screenSwipe+calib)/320))*320, 0, 320);
+      screenSwipe += (target-screenSwipe)/2;
+      if (abs(screenSwipe-target) <= 1) screenSwipe = target;
+    }
+    prevTX = -1;
+    prevTY = -1;
+  }
+}
+
+void loopSleep(bool touch) {
+  if (!((checkGyro() and (!M5.Power.Axp2101.isVBUS())) or (touch) or (vibTimer > 0))) {
+    slpTimer += prevLoopTime;
+    if (slpTimer >= 5000) {
+      int touch = 0;
+      int light = false;
+      bool charged = M5.Power.Axp2101.isVBUS();
+      M5.Display.clear();
+      M5.Display.setBrightness(0);
+      M5.Display.sleep();
+      while (!((checkGyro() and (!M5.Power.Axp2101.isVBUS())) or (touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
+        M5.Power.lightSleep(2500000);
+        delayMicroseconds(1);
+        M5.update();
+        touch = M5.Touch.getCount();
+        light = abs(255-light);
+        M5.Power.setLed(light);
+      }
+      if (M5.Power.Axp2101.isVBUS() and !charged) {
+        vibTimer = 500;
+      }
+      M5.Display.wakeup();
+      M5.Display.setBrightness(64);
+      M5.Power.setLed(255);
+      slpTimer = 0;
+    }
+  } else {
+    slpTimer = 0;
+  }
+}
+
+String getModel() {
+  switch (M5.getBoard()) {
+    case m5::board_t::board_M5StackCoreS3: return "M5StackS3";
+    case m5::board_t::board_M5AtomS3Lite: return "M5ATOMS3Lite";
+    case m5::board_t::board_M5AtomS3: return "M5ATOMS3";
+    case m5::board_t::board_M5StampC3: return "M5StampC3";
+    case m5::board_t::board_M5StampC3U: return "M5StampC3U";
+    case m5::board_t::board_M5Stack: return "M5Stack";
+    case m5::board_t::board_M5StackCore2: return "M5StackCore2";
+    case m5::board_t::board_M5StickC: return "M5StickC";
+    case m5::board_t::board_M5StickCPlus: return "M5StickCPlus";
+    case m5::board_t::board_M5StackCoreInk: return "M5CoreInk";
+    case m5::board_t::board_M5Paper: return "M5Paper";
+    case m5::board_t::board_M5Tough: return "M5Tough";
+    case m5::board_t::board_M5Station: return "M5Station";
+    case m5::board_t::board_M5AtomMatrix: return "M5ATOM Matrix";
+    case m5::board_t::board_M5AtomLite: return "M5ATOM Lite";
+    case m5::board_t::board_M5AtomPsram: return "M5ATOM PSRAM";
+    case m5::board_t::board_M5AtomU: return "M5ATOM U";
+    case m5::board_t::board_M5TimerCam: return "TimerCamera";
+    case m5::board_t::board_M5StampPico: return "M5StampPico";
+    default: return "Unknown";
+  }
 }
 
 void setup() {
@@ -284,53 +407,38 @@ void setup() {
   M5.Power.begin();
   M5.Imu.init();
   Serial.begin(115200);
-  lcd.init();
-  lcd.setBrightness(127);
+  M5.Display.init();
+  M5.Display.setBrightness(64);
   setupConfigs();
   setupSprites();
+  setupMenu();
   M5.Power.setLed(255);
   wasVBUS = M5.Power.Axp2101.isVBUS();
 }
 
 void loop() {
+  int tmrStart = millis();
   M5.update();
   cv_display.clear();
-  if (!((checkGyro() and (!M5.Power.Axp2101.isVBUS())) or (M5.Touch.getCount() > 0) or (vibTimer > 0))) {
-    if (slpTimer++ >= 50) {
-      int touch = 0;
-      int light = false;
-      bool charged = M5.Power.Axp2101.isVBUS();
-      lcd.clear();
-      lcd.setBrightness(0);
-      lcd.sleep();
-      while (!((checkGyro() and (!M5.Power.Axp2101.isVBUS())) or (touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
-        M5.Power.lightSleep(2500000);
-        delayMicroseconds(1);
-        M5.update();
-        touch = M5.Touch.getCount();
-        light = abs(255-light);
-        M5.Power.setLed(light);
-      }
-      lcd.wakeup();
-      lcd.setBrightness(127);
-      M5.Power.setLed(255);
-      slpTimer = 0;
-    }
-  } else {
-    slpTimer = 0;
-  }
+  bool touch = (M5.Touch.getCount() > 0);
+  loopTouch(touch);
+  loopSleep(touch);
   if (vibTimer > 0) {
     M5.Power.setVibration(127);
-    vibTimer--;
+    vibTimer -= prevLoopTime;
   } else {
     M5.Power.setVibration(0);
   }
   if ((!wasVBUS) and M5.Power.Axp2101.isVBUS()) {
-    vibTimer = 2;
+    vibTimer = 500;
   }
   wasVBUS = M5.Power.Axp2101.isVBUS();
   updateDigitals();
   updateClock();
+  cv_clock.pushSprite(&cv_display, centerX-ckCenterX-screenSwipe, centerY-ckCenterY, BLACK);
+  cv_menu.pushSprite(&cv_display, 320-screenSwipe, centerY-ckCenterY, BLACK);
+  cv_day.pushSprite(&cv_display, 1, sizeY-17, BLACK);
+  cv_dtime_bat.pushSprite(&cv_display, 1, 0, BLACK);
   cv_display.pushSprite(0, 0);
-  delay(100);                                                                                                      
+  prevLoopTime = millis()-tmrStart;
 }

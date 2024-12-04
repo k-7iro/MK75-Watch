@@ -15,6 +15,9 @@
         "unordered_set": "cpp",
         "vector": "cpp",
         "initializer_list": "cpp",
-        "complex": "cpp"
-    }
+        "complex": "cpp",
+        "typeinfo": "cpp",
+        "random": "cpp"
+    },
+    "search.useIgnoreFiles": true
 }
