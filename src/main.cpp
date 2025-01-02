@@ -4,6 +4,8 @@
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <NanaUI.cpp>
+#include <images.cpp>
 
 static M5Canvas cv_display(&M5.Display);
 static M5Canvas cv_clock(&cv_display);
@@ -17,12 +19,12 @@ static M5Canvas cv_ckmhand(&cv_clock);
 JsonDocument config;
 
 const int sizeX = 320;
-const int centerX = 160;
+const int centerX = sizeX/2;
 const int sizeY = 240;
-const int centerY = 120;
+const int centerY = sizeY/2;
 const int ckCenterX = 110;
 const int ckCenterY = 110;
-const int JST = 32401;
+const int JST = 32400;
 const String week[7] = {"Sun", "Mon", "Tue", "Wed", "Thr", "Fri", "Sat"};
 String M5Model;
 
@@ -31,13 +33,17 @@ int vibTimer = 0;
 int screenSwipe = 0;
 int prevTX = 0;
 int prevTY = 0;
+int firstTX = 0;
+int firstTY = 0;
 int cycle = 0;
 int prevLoopTime = 0;
-int prevSwipeAcc_1 = 0;
-int prevSwipeAcc_2 = 0;
-int prevSwipeAcc_3 = 0;
+int prevSwipeAcc[6] = {0, 0, 0, 0, 0, 0};
 
 bool wasVBUS = false;
+bool wasTouched = false;
+
+uint8_t battery = M5.Power.getBatteryLevel();
+m5::rtc_datetime_t dateTime = M5.Rtc.getDateTime();
 
 void thickLine(M5Canvas target, int x0, int y0, int x1, int y1, int color) {
   target.drawLine(x0, y0, x1, y1, color);
@@ -72,6 +78,31 @@ String force2digits(int num) {
   return String(num);
 }
 
+String getModel() {
+  switch (M5.getBoard()) {
+    case m5::board_t::board_M5StackCoreS3: return "M5StackS3";
+    case m5::board_t::board_M5AtomS3Lite: return "M5ATOMS3Lite";
+    case m5::board_t::board_M5AtomS3: return "M5ATOMS3";
+    case m5::board_t::board_M5StampC3: return "M5StampC3";
+    case m5::board_t::board_M5StampC3U: return "M5StampC3U";
+    case m5::board_t::board_M5Stack: return "M5Stack";
+    case m5::board_t::board_M5StackCore2: return "M5StackCore2";
+    case m5::board_t::board_M5StickC: return "M5StickC";
+    case m5::board_t::board_M5StickCPlus: return "M5StickCPlus";
+    case m5::board_t::board_M5StackCoreInk: return "M5CoreInk";
+    case m5::board_t::board_M5Paper: return "M5Paper";
+    case m5::board_t::board_M5Tough: return "M5Tough";
+    case m5::board_t::board_M5Station: return "M5Station";
+    case m5::board_t::board_M5AtomMatrix: return "M5ATOM Matrix";
+    case m5::board_t::board_M5AtomLite: return "M5ATOM Lite";
+    case m5::board_t::board_M5AtomPsram: return "M5ATOM PSRAM";
+    case m5::board_t::board_M5AtomU: return "M5ATOM U";
+    case m5::board_t::board_M5TimerCam: return "TimerCamera";
+    case m5::board_t::board_M5StampPico: return "M5StampPico";
+    default: return "Unknown";
+  }
+}
+
 void makeClockBase() {
   cv_ckbase.createSprite(220, 220);
   cv_ckbase.fillCircle(ckCenterX, ckCenterY, 110, WHITE);
@@ -101,32 +132,35 @@ void makeClockBase() {
   cv_ckmhand.fillScreen(SKYBLUE);
 }
 
+void updateDateTimeBat() {
+  dateTime = M5.Rtc.getDateTime();
+  battery = M5.Power.getBatteryLevel();
+}
+
 void updateClock() {
-  uint8_t bat = M5.Power.getBatteryLevel();
-  auto dt = M5.Rtc.getDateTime();
   cv_ckbase.pushSprite(&cv_clock, 0, 0);
   if (M5.Power.Axp2101.isVBUS()) {
-    cv_clock.fillArc(ckCenterX, ckCenterY, 110, 108, 270, (bat*3.6)-90.5, CYAN);
+    cv_clock.fillArc(ckCenterX, ckCenterY, 110, 108, 270, (battery*3.6)-90.5, CYAN);
   } else {
-    cv_clock.fillArc(ckCenterX, ckCenterY, 110, 108, 270, (bat*3.6)-90.5, batcolor(bat));
+    cv_clock.fillArc(ckCenterX, ckCenterY, 110, 108, 270, (battery*3.6)-90.5, batcolor(battery));
   }
   cv_ckhhand.setPivot(2, 2);
-  cv_ckhhand.pushRotated(&cv_clock, (180+((dt.time.hours*30)+(dt.time.minutes/2)))%360);
+  cv_ckhhand.pushRotated(&cv_clock, (180+((dateTime.time.hours*30)+(dateTime.time.minutes/2)))%360);
   cv_ckmhand.setPivot(1, 1);
-  cv_ckmhand.pushRotated(&cv_clock, (180+((dt.time.minutes*6)+(dt.time.seconds/10)))%360);
+  cv_ckmhand.pushRotated(&cv_clock, (180+((dateTime.time.minutes*6)+(dateTime.time.seconds/10)))%360);
+  cv_clock.fillCircle(ckCenterX, ckCenterY, 8, SKYBLUE);
+  cv_clock.fillCircle(ckCenterX, ckCenterY, 5, BLACK);
 }
 
 void updateDigitals() {
-  uint8_t bat = M5.Power.getBatteryLevel();
-  auto dt = M5.Rtc.getDateTime();
   cv_dtime_bat.clear();
   cv_dtime_bat.setTextColor(WHITE, BLACK);
-  cv_dtime_bat.drawString(force2digits(dt.time.hours)+":"+force2digits(dt.time.minutes)+" "+force2digits(dt.time.seconds), 1, 0, &fonts::Font2);
+  cv_dtime_bat.drawString(force2digits(dateTime.time.hours)+":"+force2digits(dateTime.time.minutes)+" "+force2digits(dateTime.time.seconds), 1, 0, &fonts::Font2);
   if (M5.Power.Axp2101.isVBUS()) { cv_dtime_bat.setTextColor(CYAN, BLACK); }
-  cv_dtime_bat.drawRightString(String(bat)+"%", sizeX, 0, &fonts::Font2);
+  cv_dtime_bat.drawRightString(String(battery)+"%", sizeX, 0, &fonts::Font2);
   cv_day.clear();
   cv_day.setTextColor(WHITE, BLACK);
-  cv_day.drawString(String(dt.date.month)+"/"+String(dt.date.date)+" "+week[dt.date.weekDay]+" "+dt.date.year, 1, 1, &fonts::Font2);
+  cv_day.drawString(String(dateTime.date.month)+"/"+String(dateTime.date.date)+" "+week[dateTime.date.weekDay]+" "+dateTime.date.year, 1, 1, &fonts::Font2);
   int ramFree = (int) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
   int ramTotal = (int) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
   cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB", sizeX, 1, &fonts::Font2);
@@ -141,7 +175,6 @@ String readSDJson(String filename) {
         jsoncfg = file.readString();
       }
       file.close();
-      Serial.println(jsoncfg);
       int len = jsoncfg.length() + 1;
       char jsonca[len];
       jsoncfg.toCharArray(jsonca, len);
@@ -298,8 +331,10 @@ void setupMenu() {
   cv_menu.setFont(&lgfxJapanMincho_40);
   for (int ix = -1; ix < 2; ix++) {
     for (int iy = 0; iy < 2; iy++) {
-      cv_menu.fillRect(((ix*105)-50)+(sizeX/2), ((iy*85)-85)+(sizeY/2), 100, 80, WHITE);
-      cv_menu.fillRect(((ix*105)-47)+(sizeX/2), ((iy*85)-82)+(sizeY/2), 94, 74, BLACK);
+      cv_menu.fillRect(((ix*105)-50)+(sizeX/2), ((iy*85)-88)+(sizeY/2), 100, 80, WHITE);
+      cv_menu.fillRect(((ix*105)-47)+(sizeX/2), ((iy*85)-85)+(sizeY/2), 94, 74, BLACK);
+      cv_menu.pushImage(((ix*105)-16)+(sizeX/2), ((iy*85)-80)+(sizeY/2), 32, 32, icons[(ix+1)+(iy*3)]);
+
     }
   }
 }
@@ -314,17 +349,33 @@ bool checkGyro() {
 
 void loopTouch(int touch) {
   if (touch) {
-    Serial.print("Hold: "); Serial.print(prevSwipeAcc_1); Serial.print(" "); Serial.print(prevSwipeAcc_2); Serial.print(" "); Serial.println(prevSwipeAcc_3);
     auto detail = M5.Touch.getDetail();
     if (prevTX != -1) {
       screenSwipe += prevTX-detail.x;
-      prevSwipeAcc_3 = prevSwipeAcc_2;
-      prevSwipeAcc_2 = prevSwipeAcc_1;
-      prevSwipeAcc_1 = prevTX-detail.x;
+      for (int i = 0; i < 5; i++) {
+      prevSwipeAcc[i] = prevSwipeAcc[i+1];
+    }
+      prevSwipeAcc[5] = prevTX-detail.x;
     }
     prevTX = detail.x;
     prevTY = detail.y;
+    if (wasTouched) {
+      firstTX = detail.x;
+      firstTY = detail.y;
+    }
   } else {
+    if (wasTouched and screenSwipe == 320) {
+      for (int lax = -1; lax < 2; lax++) {
+        for (int lay = 0; lay < 2; lay++) {
+          int appx = ((lax*105)-50)+(sizeX/2);
+          int appy = ((lay*85)-40)+(sizeY/2);
+          if ((appx <= prevTX) and (appx+100 >= prevTX) and (appy <= prevTY) and (appy+80 >= prevTY) and (appx <= firstTX) and (appx+100 >= firstTX) and (appy <= firstTY) and (appy+80 >= firstTY)) {
+            Serial.print(lax); Serial.print(" "); Serial.println(lay);
+            vibTimer = 100;
+          }
+        }
+      }
+    }
     if (screenSwipe < 0) {
       screenSwipe += (0-screenSwipe)/2;
       screenSwipe = round(screenSwipe);
@@ -334,7 +385,7 @@ void loopTouch(int touch) {
       screenSwipe = round(screenSwipe);
       if (abs(screenSwipe-320) <= 1) screenSwipe = 320;
     } else if (screenSwipe % 320 != 0) {
-      int calib = limit(prevSwipeAcc_3*3, -160, 160);
+      int calib = limit(prevSwipeAcc[0]*10, -160, 160);
       int target = limit(round(((float) (screenSwipe+calib)/320))*320, 0, 320);
       screenSwipe += (target-screenSwipe)/2;
       if (abs(screenSwipe-target) <= 1) screenSwipe = target;
@@ -342,6 +393,7 @@ void loopTouch(int touch) {
     prevTX = -1;
     prevTY = -1;
   }
+  wasTouched = (touch > 0);
 }
 
 void loopSleep(bool touch) {
@@ -375,31 +427,6 @@ void loopSleep(bool touch) {
   }
 }
 
-String getModel() {
-  switch (M5.getBoard()) {
-    case m5::board_t::board_M5StackCoreS3: return "M5StackS3";
-    case m5::board_t::board_M5AtomS3Lite: return "M5ATOMS3Lite";
-    case m5::board_t::board_M5AtomS3: return "M5ATOMS3";
-    case m5::board_t::board_M5StampC3: return "M5StampC3";
-    case m5::board_t::board_M5StampC3U: return "M5StampC3U";
-    case m5::board_t::board_M5Stack: return "M5Stack";
-    case m5::board_t::board_M5StackCore2: return "M5StackCore2";
-    case m5::board_t::board_M5StickC: return "M5StickC";
-    case m5::board_t::board_M5StickCPlus: return "M5StickCPlus";
-    case m5::board_t::board_M5StackCoreInk: return "M5CoreInk";
-    case m5::board_t::board_M5Paper: return "M5Paper";
-    case m5::board_t::board_M5Tough: return "M5Tough";
-    case m5::board_t::board_M5Station: return "M5Station";
-    case m5::board_t::board_M5AtomMatrix: return "M5ATOM Matrix";
-    case m5::board_t::board_M5AtomLite: return "M5ATOM Lite";
-    case m5::board_t::board_M5AtomPsram: return "M5ATOM PSRAM";
-    case m5::board_t::board_M5AtomU: return "M5ATOM U";
-    case m5::board_t::board_M5TimerCam: return "TimerCamera";
-    case m5::board_t::board_M5StampPico: return "M5StampPico";
-    default: return "Unknown";
-  }
-}
-
 void setup() {
   auto cfg = M5.config();
   cfg.internal_imu = true;
@@ -430,13 +457,18 @@ void loop() {
     M5.Power.setVibration(0);
   }
   if ((!wasVBUS) and M5.Power.Axp2101.isVBUS()) {
-    vibTimer = 500;
+    vibTimer = 200;
   }
   wasVBUS = M5.Power.Axp2101.isVBUS();
+  updateDateTimeBat();
+  if ((screenSwipe % 320 != 0) or (screenSwipe == 320)) cv_menu.pushSprite(&cv_display, 320-screenSwipe, centerY-ckCenterY, BLACK);
+  if ((screenSwipe % 320 != 0) or (screenSwipe == 0)) {
+    updateClock();
+    cv_clock.pushSprite(&cv_display, centerX-ckCenterX-screenSwipe, centerY-ckCenterY, BLACK);
+  }
   updateDigitals();
-  updateClock();
-  cv_clock.pushSprite(&cv_display, centerX-ckCenterX-screenSwipe, centerY-ckCenterY, BLACK);
-  cv_menu.pushSprite(&cv_display, 320-screenSwipe, centerY-ckCenterY, BLACK);
+  touch = (M5.Touch.getCount() > 0);
+  loopTouch(touch);
   cv_day.pushSprite(&cv_display, 1, sizeY-17, BLACK);
   cv_dtime_bat.pushSprite(&cv_display, 1, 0, BLACK);
   cv_display.pushSprite(0, 0);
