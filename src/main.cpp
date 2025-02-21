@@ -50,9 +50,12 @@ int prevLoopTime = 0;
 int prevSwipeAcc[6] = {0, 0, 0, 0, 0, 0};
 int appStart = 0;
 
+float mpu[6] = {0, 0, 0, 0, 0, 0};
+
 bool wasVBUS = false;
 bool wasTouched = false;
 bool haveToDeleteAppUI = false;
+bool afterSlp = false;
 
 uint8_t battery = M5.Power.getBatteryLevel();
 m5::rtc_datetime_t dateTime = M5.Rtc.getDateTime();
@@ -83,13 +86,6 @@ uint32_t batcolor(int bat) {
     g = 255;
   }
   return M5.Display.color888((u_int8_t) r, (u_int8_t) g, 0);
-}
-
-String force2digits(int num) {
-  if (num < 10) {
-    return "0"+String(num);
-  }
-  return String(num);
 }
 
 String getModel() {
@@ -245,7 +241,7 @@ void settings_init() {
 }
 
 void settings_loop() {
-  appUI->update();
+  appUI->update(dateTime, battery);
 }
 
 // Train
@@ -253,9 +249,11 @@ String timetableName = "";
 bool train_isMainUI = false;
 int train_refleshTimer;
 bool isWeekend;
+bool isRemainingMode = false;
 
 void train_config();
 void train_switch_week();
+void train_switch_mode();
 
 void train_init() {
   appStart = millis();
@@ -270,6 +268,8 @@ void train_init() {
   appUI->setTitle("Train");
   appUI->addItem("config", train_config, "Config");
   appUI->addItem("switch_week", train_switch_week);
+  appUI->addItem("switch_mode", train_switch_mode);
+  appUI->addLocaleToItem("switch_mode", "en", "Time");
   if (dateTime.date.weekDay == 0 || dateTime.date.weekDay == 6 || isHoliday(dateTime.date.month, dateTime.date.date, dateTime.date.weekDay)) {
     isWeekend = true;
     appUI->addLocaleToItem("switch_week", "en", "Weekend");
@@ -295,6 +295,17 @@ void train_switch_week() {
   appUI->makeUI();
 }
 
+void train_switch_mode() {
+  if (isRemainingMode) {
+    isRemainingMode = false;
+    appUI->addLocaleToItem("switch_mode", "en", "Time");
+  } else {
+    isRemainingMode = true;
+    appUI->addLocaleToItem("switch_mode", "en", "Rem. Minutes");
+  }
+  appUI->makeUI();
+}
+
 void train_setTimetable(String name) {
   timetableName = name;
   train_init();
@@ -310,7 +321,7 @@ void train_config() {
   appUI->setLocaleFont("en", 1);
   haveToDeleteAppUI = true;
   appUI->setTitle("Set Timetable");
-  for ( JsonPair loopTimetableName : train.as<JsonObject>() ) {
+  for ( JsonPair loopTimetableName : train["timetable"].as<JsonObject>() ) {
     const char* nameBuffer = loopTimetableName.key().c_str();
     appUI->addItem(nameBuffer, train_setTimetable);
     Serial.println(nameBuffer);
@@ -335,11 +346,9 @@ void train_loop() {
       int8_t hourAdd[3] = {-1, -1, -1};
       JsonDocument timetable;
       if (isWeekend) {
-        timetable = train[timetableName]["weekends"];
-        Serial.println(timetableName+" Weekends");
+        timetable = train["timetable"][timetableName]["weekends"];
       } else {
-        timetable = train[timetableName]["weekdays"];
-        Serial.println(timetableName+" weekdays");
+        timetable = train["timetable"][timetableName]["weekdays"];
       }
       String StrJson = timetable[5];
       for ( const auto loopTimetable : timetable[String(dateTime.time.hours)].as<JsonArray>() ) {
@@ -388,13 +397,29 @@ void train_loop() {
           }
         }
       }
-      Serial.println(type[0]+" "+dest[0]+String(dateTime.time.hours+hourAdd[0])+":"+force2digits(min[0]));
+      uint8_t colors[3][3] = {{255, 255, 255}, {255, 255, 255}, {255, 255, 255}};
+      for (uint8_t i = 0; i < 3; i++) {
+        if (!train["color"][type[i]].isNull()) {
+          for (uint8_t j = 0; j < 3; j++) {
+            colors[i][j] = train["color"][type[i]][j];
+          }
+        }
+      }
+      appUI->setItemColor("train1", (colors[0][0]*65536)+(colors[0][1]*256)+(colors[0][2]));
       appUI->addLocaleToItem("train1", "en", type[0]+" "+dest[0]);
+      appUI->setItemColor("train2", (colors[1][0]*65536)+(colors[1][1]*256)+(colors[1][2]));
       appUI->addLocaleToItem("train2", "en", type[1]+" "+dest[1]);
+      appUI->setItemColor("train3", (colors[2][0]*65536)+(colors[2][1]*256)+(colors[2][2]));
       appUI->addLocaleToItem("train3", "en", type[2]+" "+dest[2]);
-      appUI->addRightLocaleToItem("train1", "en", String(dateTime.time.hours+hourAdd[0])+":"+force2digits(min[0]));
-      appUI->addRightLocaleToItem("train2", "en", String(dateTime.time.hours+hourAdd[1])+":"+force2digits(min[1]));
-      appUI->addRightLocaleToItem("train3", "en", String(dateTime.time.hours+hourAdd[2])+":"+force2digits(min[2]));
+      if (isRemainingMode) {
+        appUI->addRightLocaleToItem("train1", "en", String(min[0]-dateTime.time.minutes+(hourAdd[0]*60)));
+        appUI->addRightLocaleToItem("train2", "en", String(min[1]-dateTime.time.minutes+(hourAdd[1]*60)));
+        appUI->addRightLocaleToItem("train3", "en", String(min[2]-dateTime.time.minutes+(hourAdd[2]*60)));
+      } else {
+        appUI->addRightLocaleToItem("train1", "en", String(dateTime.time.hours+hourAdd[0])+":"+force2digits(min[0]));
+        appUI->addRightLocaleToItem("train2", "en", String(dateTime.time.hours+hourAdd[1])+":"+force2digits(min[1]));
+        appUI->addRightLocaleToItem("train3", "en", String(dateTime.time.hours+hourAdd[2])+":"+force2digits(min[2]));
+      }
       appUI->makeUI();
     }
   }
@@ -402,7 +427,7 @@ void train_loop() {
   if (train_refleshTimer >= 10) {
     train_refleshTimer = 0;
   }
-  appUI->update();
+  appUI->update(dateTime, battery);
 }
 
 // Debug Settings
@@ -470,15 +495,15 @@ void updateClock() {
 void updateDigitals() {
   cv_dtime_bat.clear();
   cv_dtime_bat.setTextColor(WHITE, BLACK);
-  cv_dtime_bat.drawString(force2digits(dateTime.time.hours)+":"+force2digits(dateTime.time.minutes)+" "+force2digits(dateTime.time.seconds), 1, 0, &fonts::Font2);
+  cv_dtime_bat.drawString(force2digits(dateTime.time.hours)+":"+force2digits(dateTime.time.minutes)+" "+force2digits(dateTime.time.seconds), 0, 0, &fonts::Font2);
   if (M5.Power.Axp2101.isVBUS()) { cv_dtime_bat.setTextColor(CYAN, BLACK); }
   cv_dtime_bat.drawRightString(String(battery)+"%", sizeX, 0, &fonts::Font2);
   cv_day.clear();
   cv_day.setTextColor(WHITE, BLACK);
-  cv_day.drawString(String(dateTime.date.month)+"/"+String(dateTime.date.date)+" "+week[dateTime.date.weekDay]+" "+dateTime.date.year, 1, 1, &fonts::Font2);
+  cv_day.drawString(String(dateTime.date.month)+"/"+String(dateTime.date.date)+" "+week[dateTime.date.weekDay]+" "+dateTime.date.year, 0, 0, &fonts::Font2);
   int ramFree = (int) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
   int ramTotal = (int) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
-  cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB", sizeX, 1, &fonts::Font2);
+  cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB", sizeX, 0, &fonts::Font2);
 }
 
 /*
@@ -725,11 +750,12 @@ void setupMenu() {
 }
 
 bool checkGyro() {
-  float ax = 0;
-  float ay = 0;
-  float az = 0;
-  M5.Imu.getAccel(&ax, &ay, &az);
-  return ((az > 0.95) and (abs(ay) < 0.75) and (abs(ax) < 0.75));
+  /*
+  M5.Imu.getAccel(&mpu[0], &mpu[1], &mpu[2]);
+  return ((mpu[0] > 0.95) and (abs(mpu[1]) < 0.75) and (abs(mpu[2]) < 0.75));
+  */
+  M5.Imu.getGyro(&mpu[3], &mpu[4], &mpu[5]);
+  return ((mpu[3] > 200));
 }
 
 void loopTouch() {
@@ -795,16 +821,20 @@ void loopTouch() {
 void loopSleep() {
   bool touch = M5.Touch.getCount() > 0;
   if (!((checkGyro() and (!M5.Power.Axp2101.isVBUS())) or (touch) or (vibTimer > 0))) {
-    slpTimer += prevLoopTime;
-    if (slpTimer >= 5000) {
+    if (nowApp == "") {
+      slpTimer += prevLoopTime*3;
+    } else {
+      slpTimer += prevLoopTime;
+    }
+    if (slpTimer >= 15000) {
       int touch = 0;
       int light = false;
       bool charged = M5.Power.Axp2101.isVBUS();
       M5.Display.clear();
       M5.Display.setBrightness(0);
       M5.Display.sleep();
-      while (!((checkGyro() and (!M5.Power.Axp2101.isVBUS())) or (touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
-        M5.Power.lightSleep(500000);
+      while (!((checkGyro() and (!M5.Power.Axp2101.isVBUS())) or (touch > 0) or (M5.BtnPWR.isPressed()) or (charged != M5.Power.Axp2101.isVBUS()))) {
+        M5.Power.lightSleep(100000);
         delayMicroseconds(1);
         M5.update();
         touch = M5.Touch.getCount();
@@ -812,8 +842,9 @@ void loopSleep() {
       if (M5.Power.Axp2101.isVBUS() and !charged) {
         vibTimer = 500;
       }
+      afterSlp = true;
       M5.Display.wakeup();
-      M5.Display.setBrightness(64);
+      M5.Display.setBrightness(63);
       slpTimer = 0;
     }
   } else {
@@ -829,7 +860,7 @@ void setup() {
   M5.Imu.init();
   Serial.begin(115200);
   M5.Display.init();
-  M5.Display.setBrightness(64);
+  M5.Display.setBrightness(63);
   setupConfigs();
   setupSprites();
   setupMenu();
@@ -854,6 +885,14 @@ void loop() {
   }
   wasVBUS = M5.Power.Axp2101.isVBUS();
   updateDateTimeBat();
+  if (M5.BtnB.wasPressed()) {
+    screenSwipe = 0;
+    nowApp = "";
+  }
+  if (M5.BtnC.wasPressed()) {
+    if (M5.Display.getBrightness() )
+    M5.Display.setBrightness((M5.Display.getBrightness()+32)%256);
+  }
   if (nowApp == "settings") {
     settings_loop();
   } else if (nowApp == "train") {
@@ -865,12 +904,19 @@ void loop() {
       updateClock();
       cv_clock.pushSprite(&cv_display, centerX-ckCenterX-screenSwipe, centerY-ckCenterY, BLACK);
     }
+    if (M5.BtnA.wasPressed()) {
+      screenSwipe = 0;
+    }
     updateDigitals();
     M5.update();
     loopTouch();
     cv_day.pushSprite(&cv_display, 1, sizeY-17, BLACK);
-    cv_dtime_bat.pushSprite(&cv_display, 1, 0, BLACK);
+    cv_dtime_bat.pushSprite(&cv_display, 0, 0, BLACK);
     cv_display.pushSprite(0, 0);
   }
-  prevLoopTime = millis()-tmrStart;
+  if (afterSlp) {
+    afterSlp = false;
+  } else {
+    prevLoopTime = millis()-tmrStart;
+  }
 }

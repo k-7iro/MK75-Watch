@@ -20,7 +20,7 @@ class UI {
     void setTitle(String title, String lang);
     void makeUI();
     void makeUI(String lang);
-    void update();
+    void update(m5::rtc_datetime_t dateTime, uint8_t battery);
     void addItem(String id);
     void addItem(String id, String defName);
     void addItem(String id, String defName, String defLang);
@@ -33,8 +33,8 @@ class UI {
     void addLocaleToItem(String id, String lang, String name);
     void addRightLocaleToItem(String id, String lang, String name);
     void addLocaleToTitle(String lang, String name);
-    void setItemColor(String id, int color);
-    void setItemRightColor(String id, int color);
+    void setItemColor(String id, uint32_t color);
+    void setItemRightColor(String id, uint32_t color);
     void setLocaleFont(String lang, uint8_t font);
     void setSpace(int space);
     void linkFunctionToBack(pFunc func);
@@ -49,20 +49,30 @@ class UI {
     int firstX;
     int firstY;
     int scrollCount;
-    int space = 10;
+    int space = 20;
     pFunc backFunction;
     std::list<String> items;
     std::map<String, std::map<String, String>> itemLocale;
     std::map<String, std::map<String, String>> itemRightLocale;
-    std::map<String, int> itemColor;
-    std::map<String, int> itemRightColor;
+    std::map<String, uint32_t> itemColor;
+    std::map<String, uint32_t> itemRightColor;
     std::map<String, pFunc> itemFunction;
     std::map<String, pArgFunc> itemArgFunction;
     std::map<String, bool> itemUseArgFunction;
     std::map<String, String> titleLocale;
     std::map<String, uint8_t> localeFont;
-    M5Canvas canv = M5Canvas(&M5.Display);
+    M5Canvas disp = M5Canvas(&M5.Display);
+    M5Canvas canv = M5Canvas(&disp);
+    M5Canvas top = M5Canvas(&disp);
+    M5Canvas top_dtime_bat = M5Canvas(&top);
 };
+
+String force2digits(int num) {
+  if (num < 10) {
+    return "0"+String(num);
+  }
+  return String(num);
+}
 
 void UI::setTitle(String title) {
   titleLocale["en"] = title;
@@ -81,41 +91,55 @@ void UI::makeUI(String lang) {
   int height = M5.Display.height();
   int UIHeight;
   int rowSize = (space*2)+26;
-  //canv.createSprite(width, (items.size()*rowSize)+rowSize);
   if ((items.size()*rowSize)+rowSize > height) {
-    UIHeight = (items.size()*rowSize)+rowSize;
+    UIHeight = (items.size()*rowSize);
   } else {
     UIHeight = height;
   }
+  disp.createSprite(width, height);
   canv.createSprite(width, UIHeight);
-  canv.fillRect(1, 1, width, rowSize, WHITE);
-  canv.setTextColor(BLACK, WHITE);
-  if (localeFont[lang] == 1) canv.drawCenterString(titleLocale[lang], width/2, space, &fonts::efontJA_24);
-  else if (localeFont[lang] == 2) canv.drawCenterString(titleLocale[lang], width/2, space, &fonts::efontCN_24);
-  else canv.drawCenterString(titleLocale[lang], width/2, space, &fonts::Font4);
-  canv.drawString("<", 10, space, &fonts::Font4);
-  int cnt = 0;
+  top.createSprite(width, 48);
+  top_dtime_bat.createSprite(width, 17);
+  top.fillRect(0, 0, width, rowSize, WHITE);
+  top.setTextColor(BLACK, WHITE);
+  if (localeFont[lang] == 1) top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::efontJA_24);
+  else if (localeFont[lang] == 2) top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::efontCN_24);
+  else top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::Font4);
+  uint8_t cnt = 0;
   for(auto i = items.begin(); i != items.end(); i++ ) {
-    cnt++;
     canv.setTextColor(itemColor[*i], BLACK);
     if (localeFont[lang] == 1) canv.drawString(itemLocale[*i][lang], 10, (cnt*rowSize)+space, &fonts::efontJA_24);
     else if (localeFont[lang] == 2) canv.drawString(itemLocale[*i][lang], 10, (cnt*rowSize)+space, &fonts::efontCN_24);
     else canv.drawString(itemLocale[*i][lang], 10, (cnt*rowSize)+space, &fonts::Font4);
-    canv.setTextColor(itemColor[*i], BLACK);
+    canv.setTextColor(itemRightColor[*i], BLACK);
     if (localeFont[lang] == 1) canv.drawRightString(itemRightLocale[*i][lang], width-10, (cnt*rowSize)+space, &fonts::efontJA_24);
     else if (localeFont[lang] == 2) canv.drawRightString(itemRightLocale[*i][lang], width-10, (cnt*rowSize)+space, &fonts::efontCN_24);
     else canv.drawRightString(itemRightLocale[*i][lang], width-10, (cnt*rowSize)+space, &fonts::Font4);
     canv.drawFastHLine(0, (cnt*rowSize), width, DARKGREY);
     canv.drawFastHLine(0, (cnt*rowSize)+rowSize-1, width, DARKGREY);
+    cnt++;
   }
 }
 
-void UI::update() {
-  int rowSize = (space*2)+26;
-  int height = M5.Display.height();
-  int cHeight = canv.height();
-  canv.pushSprite(0, 0-scroll);
-  if (M5.Touch.getCount() > 0) {
+void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery) {
+  uint8_t rowSize = (space*2)+26;
+  uint16_t height = M5.Display.height();
+  uint16_t width = M5.Display.width();
+  uint16_t cHeight = canv.height();
+  uint8_t tHeight = top.height();
+  uint8_t tdHeight = top_dtime_bat.height();
+  top_dtime_bat.clear(BLACK);
+  top_dtime_bat.setTextColor(WHITE, BLACK);
+  top_dtime_bat.drawString(force2digits(dateTime.time.hours)+":"+force2digits(dateTime.time.minutes)+" "+force2digits(dateTime.time.seconds), 0, 0, &fonts::Font2);
+  if (M5.Power.Axp2101.isVBUS()) { top_dtime_bat.setTextColor(CYAN, BLACK); }
+  top_dtime_bat.drawRightString(String(battery)+"%", width, 0, &fonts::Font2);
+  top_dtime_bat.pushSprite(0, 0);
+  canv.pushSprite(0, tHeight-scroll);
+  top.pushSprite(0, 0);
+  disp.pushSprite(0, 0);
+  if (M5.BtnA.wasPressed()) {
+    backFunction();
+  } else if (M5.Touch.getCount() > 0) {
     auto detail = M5.Touch.getDetail();
     if (firstX == -1) {
       firstX = detail.x;
@@ -136,17 +160,13 @@ void UI::update() {
     scrollAccel[0] = floor(scrollAccel[0]*0.8);
     scroll += scrollAccel[0];
     if (prevX != -1) {
-      int touched = floor((prevY+scroll)/rowSize);
-      if (scrollCount == 0) {
-        if (touched == 0) {
-          if (prevX < 50) backFunction();
+      int touched = floor((prevY+scroll)/rowSize)-1;
+      if (scrollCount == 0 && items.size() > touched && touched >= 0) {
+        String touchedID = *std::next(items.begin(), touched);
+        if (itemUseArgFunction[touchedID]) {
+          itemArgFunction[touchedID](touchedID);
         } else {
-          String touchedID = *std::next(items.begin(), touched-1);
-          if (itemUseArgFunction[touchedID]) {
-            itemArgFunction[touchedID](touchedID);
-          } else {
-            itemFunction[touchedID]();
-          }
+          itemFunction[touchedID]();
         }
       }
     }
@@ -158,8 +178,8 @@ void UI::update() {
   }
   if (scroll < 0) {
     scroll = 0;
-  } else if (scroll > cHeight-height) {
-    scroll = cHeight-height;
+  } else if (scroll > cHeight-height+tHeight) {
+    scroll = cHeight-height+tHeight;
   }
 }
 
@@ -175,8 +195,8 @@ void UI::addItem(String id, String defName, String defLang) {
   items.push_back(id);
   itemLocale[id][defLang] = defName;
   itemRightLocale[id][defLang] = "";
-  itemColor[id] = WHITE;
-  itemRightColor[id] = LIGHTGREY;
+  itemColor[id] = 16777215;
+  itemRightColor[id] = 16776960;
   itemUseArgFunction[id] = false;
 }
 
@@ -225,11 +245,11 @@ void UI::addLocaleToTitle(String lang, String name) {
   titleLocale[lang] = name;
 }
 
-void UI::setItemColor(String id, int color) {
+void UI::setItemColor(String id, uint32_t color) {
   itemColor[id] = color;
 }
 
-void UI::setItemRightColor(String id, int color) {
+void UI::setItemRightColor(String id, uint32_t color) {
   itemRightColor[id] = color;
 }
 
