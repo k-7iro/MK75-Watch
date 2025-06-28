@@ -2,6 +2,7 @@
   [ NanaUI ] by K-Nana
   A simple UI system for M5Stack with touch panel.
   Multilingual support.
+  MIT License https://opensource.org/license/mit
 */
 
 #pragma once
@@ -9,6 +10,7 @@
 #include <M5GFX.h>
 #include <map>
 #include <list>
+#include "libs/NanaTools.hpp"
 
 typedef void (*pFunc)(void);
 
@@ -41,6 +43,7 @@ class UI {
     void linkFunctionToItem(String id, pFunc func);
     void linkArgFunctionToItem(String id, pArgFunc func);
     void setUseArgFunctionToItem(String id, bool useArgFunction);
+    void setTransparentMode(bool mode);
   private:
     int scroll = 0;
     int16_t scrollAccel[3] = {0, 0, 0};
@@ -50,6 +53,7 @@ class UI {
     int firstY;
     int scrollCount;
     int space = 20;
+    bool transparentMode = false;
     pFunc backFunction;
     std::list<String> items;
     std::map<String, std::map<String, String>> itemLocale;
@@ -66,13 +70,6 @@ class UI {
     M5Canvas top = M5Canvas(&disp);
     M5Canvas top_dtime_bat = M5Canvas(&top);
 };
-
-String force2digits(int num) {
-  if (num < 10) {
-    return "0"+String(num);
-  }
-  return String(num);
-}
 
 void UI::setTitle(String title) {
   titleLocale["en"] = title;
@@ -94,27 +91,51 @@ void UI::makeUI(String lang) {
   if ((items.size()*rowSize)+rowSize > height) {
     UIHeight = (items.size()*rowSize);
   } else {
-    UIHeight = height;
+    UIHeight = height-48;
   }
   disp.createSprite(width, height);
+  disp.fillScreen(TFT_BLACK);
   canv.createSprite(width, UIHeight);
+  if (transparentMode) {
+    canv.fillScreen(M5.Lcd.color565(16, 8, 16));
+  } else {
+    canv.fillScreen(TFT_BLACK);
+  }
   top.createSprite(width, 48);
   top_dtime_bat.createSprite(width, 17);
   top.fillRect(0, 0, width, rowSize, WHITE);
   top.setTextColor(BLACK, WHITE);
-  if (localeFont[lang] == 1) top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::efontJA_24);
-  else if (localeFont[lang] == 2) top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::efontCN_24);
-  else top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::Font4);
+  if (titleLocale.count(lang) > 0) {
+    if (localeFont[lang] == 1) top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::efontJA_24);
+    else if (localeFont[lang] == 2) top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::efontCN_24);
+    else top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::Font4);
+  } else {
+    if (localeFont["en"] == 1) top.drawCenterString(titleLocale["en"], width/2, 18, &fonts::efontJA_24);
+    else if (localeFont["en"] == 2) top.drawCenterString(titleLocale["en"], width/2, 18, &fonts::efontCN_24);
+    else top.drawCenterString(titleLocale["en"], width/2, 18, &fonts::Font4);
+  }
   uint8_t cnt = 0;
   for(auto i = items.begin(); i != items.end(); i++ ) {
     canv.setTextColor(itemColor[*i], BLACK);
-    if (localeFont[lang] == 1) canv.drawString(itemLocale[*i][lang], 10, (cnt*rowSize)+space, &fonts::efontJA_24);
-    else if (localeFont[lang] == 2) canv.drawString(itemLocale[*i][lang], 10, (cnt*rowSize)+space, &fonts::efontCN_24);
-    else canv.drawString(itemLocale[*i][lang], 10, (cnt*rowSize)+space, &fonts::Font4);
+    if (itemLocale[*i].count(lang) > 0) {
+      if (localeFont[lang] == 1) canv.drawString(itemLocale[*i][lang], 10, (cnt*rowSize)+space, &fonts::efontJA_24);
+      else if (localeFont[lang] == 2) canv.drawString(itemLocale[*i][lang], 10, (cnt*rowSize)+space, &fonts::efontCN_24);
+      else canv.drawString(itemLocale[*i][lang], 10, (cnt*rowSize)+space, &fonts::Font4);
+    } else {
+      if (localeFont[lang] == 1) canv.drawString(itemLocale[*i]["en"], 10, (cnt*rowSize)+space, &fonts::efontJA_24);
+      else if (localeFont[lang] == 2) canv.drawString(itemLocale[*i]["en"], 10, (cnt*rowSize)+space, &fonts::efontCN_24);
+      else canv.drawString(itemLocale[*i]["en"], 10, (cnt*rowSize)+space, &fonts::Font4);
+    }
     canv.setTextColor(itemRightColor[*i], BLACK);
-    if (localeFont[lang] == 1) canv.drawRightString(itemRightLocale[*i][lang], width-10, (cnt*rowSize)+space, &fonts::efontJA_24);
-    else if (localeFont[lang] == 2) canv.drawRightString(itemRightLocale[*i][lang], width-10, (cnt*rowSize)+space, &fonts::efontCN_24);
-    else canv.drawRightString(itemRightLocale[*i][lang], width-10, (cnt*rowSize)+space, &fonts::Font4);
+    if (itemRightLocale[*i].count(lang) > 0) {
+      if (localeFont[lang] == 1) canv.drawRightString(itemRightLocale[*i][lang], width-10, (cnt*rowSize)+space, &fonts::efontJA_24);
+      else if (localeFont[lang] == 2) canv.drawRightString(itemRightLocale[*i][lang], width-10, (cnt*rowSize)+space, &fonts::efontCN_24);
+      else canv.drawRightString(itemRightLocale[*i][lang], width-10, (cnt*rowSize)+space, &fonts::Font4);
+    } else {
+      if (localeFont[lang] == 1) canv.drawRightString(itemRightLocale[*i]["en"], width-10, (cnt*rowSize)+space, &fonts::efontJA_24);
+      else if (localeFont[lang] == 2) canv.drawRightString(itemRightLocale[*i]["en"], width-10, (cnt*rowSize)+space, &fonts::efontCN_24);
+      else canv.drawRightString(itemRightLocale[*i]["en"], width-10, (cnt*rowSize)+space, &fonts::Font4);
+    }
     canv.drawFastHLine(0, (cnt*rowSize), width, DARKGREY);
     canv.drawFastHLine(0, (cnt*rowSize)+rowSize-1, width, DARKGREY);
     cnt++;
@@ -130,32 +151,34 @@ void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery) {
   uint8_t tdHeight = top_dtime_bat.height();
   top_dtime_bat.clear(BLACK);
   top_dtime_bat.setTextColor(WHITE, BLACK);
-  top_dtime_bat.drawString(force2digits(dateTime.time.hours)+":"+force2digits(dateTime.time.minutes)+" "+force2digits(dateTime.time.seconds), 0, 0, &fonts::Font2);
+  top_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
   if (M5.Power.Axp2101.isVBUS()) { top_dtime_bat.setTextColor(CYAN, BLACK); }
   top_dtime_bat.drawRightString(String(battery)+"%", width, 0, &fonts::Font2);
   top_dtime_bat.pushSprite(0, 0);
   canv.pushSprite(0, tHeight-scroll);
   top.pushSprite(0, 0);
-  disp.pushSprite(0, 0);
+  disp.pushSprite(0, 0, M5.Lcd.color565(16, 8, 16));
   if (M5.BtnA.wasPressed()) {
     backFunction();
   } else if (M5.Touch.getCount() > 0) {
     auto detail = M5.Touch.getDetail();
-    if (firstX == -1) {
-      firstX = detail.x;
-      firstY = detail.y;
-    }
-    uint8_t accelArrSize = (sizeof(scrollAccel)/sizeof(int16_t));
-    if (prevY != -1) {
-      for (int i = 0; i < accelArrSize-1; i++) {
-        scrollAccel[i] = scrollAccel[i+1];
+    if (detail.y < 240) {
+      if (firstX == -1) {
+        firstX = detail.x;
+        firstY = detail.y;
       }
-      scrollAccel[accelArrSize-1] = prevY-detail.y;
-      scroll += scrollAccel[accelArrSize-1];
-      scrollCount += scrollAccel[accelArrSize-1];
+      uint8_t accelArrSize = (sizeof(scrollAccel)/sizeof(int16_t));
+      if (prevY != -1) {
+        for (int i = 0; i < accelArrSize-1; i++) {
+          scrollAccel[i] = scrollAccel[i+1];
+        }
+        scrollAccel[accelArrSize-1] = prevY-detail.y;
+        scroll += scrollAccel[accelArrSize-1];
+        scrollCount += scrollAccel[accelArrSize-1];
+      }
+      prevX = detail.x;
+      prevY = detail.y;
     }
-    prevX = detail.x;
-    prevY = detail.y;
   } else {
     scrollAccel[0] = floor(scrollAccel[0]*0.8);
     scroll += scrollAccel[0];
@@ -275,4 +298,8 @@ void UI::linkArgFunctionToItem(String id, pArgFunc func) {
 
 void UI::setUseArgFunctionToItem(String id, bool useArgFunction) {
   itemUseArgFunction[id] = useArgFunction;
+}
+
+void UI::setTransparentMode(bool mode) {
+  transparentMode = mode;
 }
