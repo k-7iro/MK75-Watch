@@ -4,6 +4,7 @@
 
 #pragma once
 #include <M5Unified.h>
+#include <list>
 
 int limit(int num, int min, int max) {
   if (num < min) return min;
@@ -27,4 +28,33 @@ String forceDigits(int num, int digits) {
     }
   }
   return result;
+}
+
+std::list<String> sprit(String sentence, char denim) {
+  std::list<String> result;
+  while (true) {
+    int find = sentence.indexOf(denim);
+    if (find == -1) {
+      if (sentence != "") result.push_back(sentence);
+      return result;
+    } else {
+      if (find != 0) result.push_back(sentence.substring(0, find));
+      sentence = sentence.substring(find+1, sentence.length());
+    }
+  }
+}
+
+bool isStringDigit(String target) {
+  if (target.charAt(0) == '-') target = target.substring(1, target.length());
+  uint8_t dotCount = 0;
+  uint16_t cnt = 0;
+  for (auto i = target.begin(); i != target.end(); i++) {
+    if (*i == '.') {
+      if ((cnt == 0) or (cnt == target.length()-1)) return false;
+      dotCount++;
+      if (dotCount > 1) return false;
+    } else if (!isdigit(*i)) return false;
+    cnt++;
+  }
+  return (!target.isEmpty());
 }

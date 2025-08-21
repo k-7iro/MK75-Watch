@@ -38,9 +38,10 @@ static M5Canvas cv_stwt_top(&cv_display);
 static M5Canvas cv_timesel(&M5.Display);
 
 UI *appUI;
-JsonDocument wifi;
-JsonDocument train;
+JsonDocument wifiJson;
+JsonDocument trainJson;
 JsonDocument alarmJson;
+JsonDocument spDatesJson;
 std::list<long> timers;
 
 const String lang = "ja";
@@ -76,6 +77,7 @@ int prevSwipeAcc[6] = {0, 0, 0, 0, 0, 0};
 int appStart = 0;
 int checkAlarmTimer = 0;
 uint8_t lastAlarmMin = 60;
+uint16_t lastSync = 0;
 
 float mpu[3] = {0, 0, 0};
 float prevGyro[5] = {0, 0, 0, 0, 0};
@@ -244,6 +246,94 @@ bool checkAccel() {
   return ((sum < 1.2) and (sum > 0.8));
 }
 
+String connectWiFi(JsonDocument conf) {
+  String bestSSID = "";
+  int8_t bestRSSI = -128;
+  if (!conf.isNull()) {
+    int n = WiFi.scanNetworks();
+    for (int i = 0; i < n; ++i) {
+      //Serial.println(WiFi.SSID(i));
+      if (!conf[WiFi.SSID(i)].isNull()) {
+        if (bestRSSI < WiFi.RSSI(i)) {
+          bestSSID = WiFi.SSID(i);
+          bestRSSI = WiFi.RSSI(i);
+        }
+      }
+    }
+  }
+  if (bestSSID != "") {
+    Serial.println("Try to connect "+bestSSID+" ...");
+    String pass = conf[bestSSID];
+    WiFi.begin(bestSSID, pass);
+    return bestSSID;
+  }
+  return "";
+}
+
+bool connectWiFi() {
+  WiFi.begin();
+  int timer = 0;
+  while (WiFi.status() != WL_CONNECTED and timer < 100){
+      delay(100);
+      timer++;
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    return true;
+  }
+  return false;
+}
+
+String connectHTTP(String url) {
+  WiFiClient client;
+  HTTPClient http;
+  String body;
+  if (http.begin(client, url)) {
+    //http.addHeader("Content-Type", "application/json");
+    int responseCode = http.GET();
+    body = http.getString();
+    http.end();
+  } else {
+    body = "";
+  }
+  return body;
+}
+
+void setRTCFromUNIX(time_t unixTime) {
+  struct tm *timeinfo;
+  timeinfo = localtime(&unixTime);
+  m5::rtc_time_t TimeStruct;
+  m5::rtc_date_t DateStruct;
+  TimeStruct.hours = timeinfo->tm_hour;
+  TimeStruct.minutes = timeinfo->tm_min;
+  TimeStruct.seconds = timeinfo->tm_sec;
+  M5.Rtc.setTime(TimeStruct);
+  DateStruct.weekDay = timeinfo->tm_wday;
+  DateStruct.month = timeinfo->tm_mon + 1;
+  DateStruct.date = timeinfo->tm_mday;
+  DateStruct.year = timeinfo->tm_year + 1900;
+  M5.Rtc.setDate(DateStruct);
+}
+
+String syncTime() {
+  int tmrStart = millis();
+  String timeResp = connectHTTP("http://worldtimeapi.org/api/timezone/Japan");
+  if (timeResp != "") {
+    //Serial.println(timeResp);
+    JsonDocument timeRespJSON;
+    DeserializationError error = deserializeJson(timeRespJSON, timeResp);
+    if (error) {
+      String errorMsg = error.c_str();
+      return "json:"+errorMsg;
+    } else {
+      int time = timeRespJSON["unixtime"];
+      setRTCFromUNIX(time+JST+ceil((millis()-tmrStart)/2000));
+      return "";
+    }
+  } else {
+    return "no resp";
+  }
+}
+
 void notice(String title, String time) {
   M5.Display.wakeup();
   M5.Display.setBrightness(63);
@@ -293,7 +383,7 @@ bool checkAlarm() {
 }
 
 bool checkTimer() {
-  for(auto i = timers.begin(); i != timers.end(); i++ ) {
+  for(auto i = timers.begin(); i != timers.end(); i++) {
     if (*i <= millis()) {
       timers.erase(i);
       notice("Timer", "");
@@ -353,13 +443,30 @@ void lowPowSleep() {
   M5.Display.setBrightness(0);
   M5.Display.sleep();
   M5.Imu.sleep();
+  M5.Power.setExtOutput(false);
   while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
     M5.Power.lightSleep(10000000);
     dateTime = M5.Rtc.getDateTime();
     if (checkAlarm() || checkTimer()) break;
+    if (lastSync != dateTime.date.date+(dateTime.date.month<<5)) {
+      M5.Power.setLed(255);
+      long wifiTimer = millis();
+      String SSID = connectWiFi(wifiJson);
+      if (SSID != "") {
+        while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
+          delay(1000);
+        }
+      }
+      if (WiFi.status() == WL_CONNECTED) {
+        syncTime();
+      }
+      WiFi.disconnect(true);
+      M5.Power.setLed(0);
+    }
     M5.update();
     touch = M5.Touch.getCount();
   }
+  M5.Power.setExtOutput(true);
   M5.Imu.begin();
 }
 
@@ -381,6 +488,7 @@ void activeSleep() {
   M5.Display.clear();
   M5.Display.setBrightness(0);
   M5.Display.sleep();
+  M5.Power.setExtOutput(false);
   while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
     M5.Power.lightSleep(100000);
     M5.update();
@@ -402,6 +510,7 @@ void activeSleep() {
     alarmTimer++;
     touch = M5.Touch.getCount();
   }
+  M5.Power.setExtOutput(true);
 }
 
 void updateDateTimeBat() {
@@ -815,7 +924,7 @@ void train_config() {
   appUI->setLocaleFont("ja", 1);
   appUI->setTitle("Set Timetable");
   appUI->addLocaleToTitle("ja", "時刻表を設定");
-  for ( JsonPair loopTimetableName : train["timetable"].as<JsonObject>() ) {
+  for ( JsonPair loopTimetableName : trainJson["timetable"].as<JsonObject>() ) {
     const char* nameBuffer = loopTimetableName.key().c_str();
     appUI->addItem(nameBuffer, train_setTimetable);
   }
@@ -845,9 +954,9 @@ void train_loop() {
       int8_t hourAdd[3] = {-1, -1, -1};
       JsonDocument timetable;
       if (isWeekend) {
-        timetable = train["timetable"][timetableName]["weekends"];
+        timetable = trainJson["timetable"][timetableName]["weekends"];
       } else {
-        timetable = train["timetable"][timetableName]["weekdays"];
+        timetable = trainJson["timetable"][timetableName]["weekdays"];
       }
       String StrJson = timetable[5];
       for ( const auto loopTimetable : timetable[String(dateTime.time.hours)].as<JsonArray>() ) {
@@ -898,9 +1007,9 @@ void train_loop() {
       }
       uint8_t colors[3][3] = {{255, 255, 255}, {255, 255, 255}, {255, 255, 255}};
       for (uint8_t i = 0; i < 3; i++) {
-        if (!train["color"][type[i]].isNull()) {
+        if (!trainJson["color"][type[i]].isNull()) {
           for (uint8_t j = 0; j < 3; j++) {
-            colors[i][j] = train["color"][type[i]][j];
+            colors[i][j] = trainJson["color"][type[i]][j];
           }
         }
       }
@@ -1032,9 +1141,11 @@ String command = "";
 bool commander_inited = false;
 bool commander_dead = false;
 uint16_t commander_blinkTimer = 0;
+std::map<String, int> commander_memory;
 
 void commander_init();
 void commander_loop();
+String commander_runCommand(std::list<String> args);
 
 void commander_init() {
   commander_inited = false;
@@ -1047,8 +1158,9 @@ void commander_loop() {
   if (!commander_inited) {
     cv_display.clear();
     cv_display.setCursor(0, 0);
-    cv_display.setTextColor(WHITE, BLACK);
+    cv_display.setTextColor(CYAN, BLACK);
     cv_display.println("MK75-Commander V1.0");
+    cv_display.setTextColor(YELLOW, BLACK);
     cv_display.print("> ");
     commander_inited = true;
   }
@@ -1063,8 +1175,13 @@ void commander_loop() {
           command.remove(command.length()-1);
           slpTimer = 0;
         } else if (c == 13) {
-          cv_display.println("> "+command+" ");
-          cv_display.println("Command result Here");
+          cv_display.setCursor(0, cv_display.getCursorY());
+          cv_display.setTextColor(YELLOW, BLACK);
+          cv_display.print("> ");
+          cv_display.setTextColor(WHITE, BLACK);
+          cv_display.println(command);
+          std::list<String> parsed = sprit(command, ' ');
+          cv_display.println(commander_runCommand(parsed));
           command = "";
           slpTimer = 0;
         } else if (c != 0) {
@@ -1073,10 +1190,15 @@ void commander_loop() {
         }
       }
       cv_display.setCursor(0, cv_display.getCursorY());
+      cv_display.setTextColor(YELLOW, BLACK);
+      cv_display.print("> ");
+      cv_display.setTextColor(WHITE, BLACK);
+      cv_display.print(command);
+      cv_display.setTextColor(LIGHTGREY, BLACK);
       if (commander_blinkTimer > 500) {
-        cv_display.print("> "+command+"_ ");
+        cv_display.print("_ ");
       } else {
-        cv_display.print("> "+command+"  ");
+        cv_display.print("  ");
       }
     } else {
       commander_dead = true;
@@ -1100,6 +1222,54 @@ void commander_loop() {
     }
   }
   cv_display.pushSprite(0, 0);
+}
+
+double commander_getTerm(String target) {
+  double term;
+  if (isStringDigit(target)) {
+    term = target.toDouble();
+  } else {
+    if (commander_memory.count(target)) {
+      term = commander_memory[target];
+    } else {
+      return INT_MIN;
+    }
+  }
+  return term;
+}
+
+double commander_calc(String type, double a, double b) {
+  if (type == "add") return a+b;
+  else if (type == "sub") return a-b;
+  else if (type == "mul") return a*b;
+  else if (type == "div") return a/b;
+  return 0;
+}
+
+String commander_runCommand(std::list<String> args) {
+  String commandType = *args.begin();
+  if ((commandType == "add") or (commandType == "sub") or (commandType == "mul") or (commandType == "div")) {
+    bool first = true;
+    double result = 0;
+    for (auto i = std::next(args.begin()); i != args.end(); i++) {
+      String termStr = *i;
+      if ((termStr).charAt(0) == '>') {
+        termStr = termStr.substring(1, termStr.length());
+        commander_memory[termStr] = result;
+        return String(result)+" > "+termStr;
+      }
+      double term = commander_getTerm(termStr);
+      if (term == INT_MIN) return "Unknown Memory: "+termStr;
+      if (first) {
+        result = term;
+        first = false;
+      } else {
+        result = commander_calc(commandType, result, term);
+      }
+    }
+    return String(result);
+  }
+  return "Unknown Command";
 }
 
 // Debug Settings
@@ -1166,80 +1336,25 @@ void updateDigitals() {
   if (M5.Power.Axp2101.isVBUS()) { cv_dtime_bat.setTextColor(CYAN, TFT_BLACK); }
   cv_dtime_bat.drawRightString(String(battery)+"%", sizeX, 0, &fonts::Font2);
   cv_day.clear();
+  uint8_t dateY;
+  if (!spDatesJson[String(dateTime.date.month)].isNull()) {
+    if (!spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)].isNull()) {
+      dateY = 0;
+      int dayColor = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)]["color"];
+      cv_day.setTextColor(M5.Display.color24to16(dayColor), TFT_BLACK);
+      String dayName = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)]["name"];
+      cv_day.drawString(dayName, 0, 17, &fonts::Font2);
+    } else {
+      dateY = 17;
+    }
+  } else {
+    dateY = 17;
+  }
   cv_day.setTextColor(TFT_WHITE, TFT_BLACK);
-  cv_day.drawString(String(dateTime.date.month)+"/"+String(dateTime.date.date)+" "+week[dateTime.date.weekDay]+" "+dateTime.date.year, 0, 0, &fonts::Font2);
+  cv_day.drawString(String(dateTime.date.month)+"/"+String(dateTime.date.date)+" "+week[dateTime.date.weekDay]+" "+dateTime.date.year, 0, dateY, &fonts::Font2);
   int ramFree = (int) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
   int ramTotal = (int) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
-  cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB", sizeX, 0, &fonts::Font2);
-}
-
-String connectWiFi(JsonDocument conf) {
-  String bestSSID = "";
-  int8_t bestRSSI = -128;
-  if (!conf.isNull()) {
-    int n = WiFi.scanNetworks();
-    for (int i = 0; i < n; ++i) {
-      //Serial.println(WiFi.SSID(i));
-      ;
-      if (!conf[WiFi.SSID(i)].isNull()) {
-        if (bestRSSI < WiFi.RSSI(i)) {
-          bestSSID = WiFi.SSID(i);
-          bestRSSI = WiFi.RSSI(i);
-        }
-      }
-    }
-  }
-  if (bestSSID != "") {
-    Serial.println("Try to connect "+bestSSID+" ...");
-    String pass = conf[bestSSID];
-    WiFi.begin(bestSSID, pass);
-    return bestSSID;
-  }
-  return "";
-}
-
-bool connectWiFi() {
-  WiFi.begin();
-  int timer = 0;
-  while (WiFi.status() != WL_CONNECTED and timer < 100){
-      delay(100);
-      timer++;
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    return true;
-  }
-  return false;
-}
-
-String connectHTTP(String url) {
-  WiFiClient client;
-  HTTPClient http;
-  String body;
-  if (http.begin(client, url)) {
-    //http.addHeader("Content-Type", "application/json");
-    int responseCode = http.GET();
-    body = http.getString();
-    http.end();
-  } else {
-    body = "";
-  }
-  return body;
-}
-
-void setRTCFromUNIX(time_t unixTime) {
-  struct tm *timeinfo;
-  timeinfo = localtime(&unixTime);
-  m5::rtc_time_t TimeStruct;
-  m5::rtc_date_t DateStruct;
-  TimeStruct.hours = timeinfo->tm_hour;
-  TimeStruct.minutes = timeinfo->tm_min;
-  TimeStruct.seconds = timeinfo->tm_sec;
-  M5.Rtc.setTime(TimeStruct);
-  DateStruct.weekDay = timeinfo->tm_wday;
-  DateStruct.month = timeinfo->tm_mon + 1;
-  DateStruct.date = timeinfo->tm_mday;
-  DateStruct.year = timeinfo->tm_year + 1900;
-  M5.Rtc.setDate(DateStruct);
+  cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB", sizeX, 17, &fonts::Font2);
 }
 
 bool copySDtoSPI() {
@@ -1306,13 +1421,14 @@ void setupConfigs() {
     M5.Display.println("failed");
   }
   M5.Display.print("Loading wifi json...");
-  String SPIResult = readSPIJson("/wifi.json", &wifi, 1000);
+  String SPIResult = readSPIJson("/wifi.json", &wifiJson, 1000);
+  M5.Display.println("finish");
+  /*
   long wifiTimer = 0;
   if (SPIResult == "") {
-    M5.Display.println("success");
     if (WiFi.status() != WL_CONNECTED) {
       M5.Display.print("wifi from json connect...");
-      String SSID = connectWiFi(wifi);
+      String SSID = connectWiFi(wifiJson);
       if (SSID != "") {
         M5.Display.println(SSID+" success");
         wifiTimer = millis();
@@ -1321,52 +1437,39 @@ void setupConfigs() {
       }
     }
   } else {
-    M5.Display.println(SPIResult);
+    M5.Display.println("error ["+SPIResult+"]");
   }
+  */
   M5.Display.print("Loading train json...");
-  readSPIJson("/train.json", &train, 100000);
+  readSPIJson("/train.json", &trainJson, 100000);
   M5.Display.println("finish");
   M5.Display.print("Loading alarm json...");
   readSPIJson("/alarm.json", &alarmJson, 100000);
   M5.Display.println("finish");
+  M5.Display.print("Loading special dates json...");
+  readSPIJson("/special_dates.json", &spDatesJson, 100000);
+  M5.Display.println("finish");
+  /*
   if (wifiTimer != 0) {
     while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
-      delay(500);
+      delay(1000);
     }
   }
   if (WiFi.status() == WL_CONNECTED) {
     M5.Display.print("change time...");
-    int tmrStart = millis();
-    String timeResp = connectHTTP("http://api1.sakana11.org/api/ntp-e");
-    if (timeResp != "") {
-      Serial.println(timeResp);
-      JsonDocument timeRespJSON;
-      DeserializationError error = deserializeJson(timeRespJSON, timeResp);
-      if (error) {
-        String errorMsg = error.c_str();
-        M5.Display.println("failed [json:"+errorMsg+"]");
-      } else {
-        //int time = timeRespJSON["unixtime"];
-        //setRTCFromUNIX(time+JST+ceil((millis()-tmrStart)/2000));
-        m5::rtc_time_t TimeStruct;
-        m5::rtc_date_t DateStruct;
-        TimeStruct.hours = timeRespJSON["hour"];
-        TimeStruct.minutes = timeRespJSON["min"];
-        TimeStruct.seconds = timeRespJSON["sec"];
-        M5.Rtc.setTime(TimeStruct);
-        DateStruct.month = timeRespJSON["month"];
-        DateStruct.date = timeRespJSON["day"];
-        DateStruct.year = timeRespJSON["year"];
-        M5.Rtc.setDate(DateStruct);
-        M5.Display.println("success");
-      }
+    String error = syncTime();
+    if (error == "") {
+      M5.Display.println("success");
     } else {
-      M5.Display.println("failed [no resp]");
+      M5.Display.println("failed ["+error+"]");
     }
   } else {
     M5.Display.println("can't set time");
   }
   WiFi.disconnect(true);
+  */
+  dateTime = M5.Rtc.getDateTime();
+  lastSync = dateTime.date.date+(dateTime.date.month<<5);
   delay(1000);
   M5.Display.clear();
 }
@@ -1377,7 +1480,7 @@ void setupSprites() {
   cv_menu.createSprite(sizeX, 220);
   makeClockBase();
   cv_dtime_bat.createSprite(sizeX, 17);
-  cv_day.createSprite(sizeX, 17);
+  cv_day.createSprite(sizeX, 34);
 }
 
 void setupMenu() {
@@ -1477,7 +1580,7 @@ void setup() {
   cfg.internal_imu = true;
   M5.begin(cfg);
   M5.Power.begin();
-  M5.Imu.init();
+  M5.Imu.begin();
   Serial.begin(115200);
   M5.Display.init();
   M5.Display.setBrightness(63);
@@ -1563,7 +1666,7 @@ void loop() {
     updateDigitals();
     M5.update();
     //loopTouch();
-    cv_day.pushSprite(&cv_display, 1, sizeY-17, TFT_BLACK);
+    cv_day.pushSprite(&cv_display, 1, sizeY-34, TFT_BLACK);
     cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
     cv_display.pushSprite(0, 0);
   }
