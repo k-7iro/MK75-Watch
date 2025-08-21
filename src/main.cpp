@@ -307,7 +307,7 @@ void setRTCFromUNIX(time_t unixTime) {
   TimeStruct.minutes = timeinfo->tm_min;
   TimeStruct.seconds = timeinfo->tm_sec;
   M5.Rtc.setTime(TimeStruct);
-  DateStruct.weekDay = timeinfo->tm_wday;
+  //DateStruct.weekDay = timeinfo->tm_wday;
   DateStruct.month = timeinfo->tm_mon + 1;
   DateStruct.date = timeinfo->tm_mday;
   DateStruct.year = timeinfo->tm_year + 1900;
@@ -445,7 +445,6 @@ void lowPowSleep() {
   M5.Imu.sleep();
   M5.Power.setExtOutput(false);
   while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
-    M5.Power.lightSleep(10000000);
     dateTime = M5.Rtc.getDateTime();
     if (checkAlarm() || checkTimer()) break;
     if (lastSync != dateTime.date.date+(dateTime.date.month<<5)) {
@@ -460,9 +459,12 @@ void lowPowSleep() {
       if (WiFi.status() == WL_CONNECTED) {
         syncTime();
       }
+      dateTime = M5.Rtc.getDateTime();
+      lastSync = dateTime.date.date+(dateTime.date.month<<5);
       WiFi.disconnect(true);
       M5.Power.setLed(0);
     }
+    M5.Power.lightSleep(10000000);
     M5.update();
     touch = M5.Touch.getCount();
   }
@@ -1611,11 +1613,7 @@ void loop() {
     screenSwipe = 0;
     if (nowApp != "") appEnd();
   }
-  if (M5.BtnC.wasPressed()) {
-    //if (M5.Display.getBrightness() )
-    //M5.Display.setBrightness((M5.Display.getBrightness()+32)%256);
-    //emergency();
-  }
+  if (M5.BtnC.wasPressed()) {}
   if (UIAddtional == "time") {
     cv_timesel.pushSprite(centerX-150, centerY-60);
     if (M5.Touch.getCount() > 0) {
