@@ -78,6 +78,8 @@ int appStart = 0;
 int checkAlarmTimer = 0;
 uint8_t lastAlarmMin = 60;
 uint16_t lastSync = 0;
+int birthChangeTimer = 0;
+uint8_t birthChangeID = 0;
 
 float mpu[3] = {0, 0, 0};
 float prevGyro[5] = {0, 0, 0, 0, 0};
@@ -334,6 +336,27 @@ String syncTime() {
   }
 }
 
+void syncTimeOnSettings() {
+  M5.Display.clear();
+  M5.Display.setCursor(0, 0);
+  M5.Display.setTextColor(WHITE, BLACK);
+  M5.Display.println("Time Sync...");
+  long wifiTimer = millis();
+  String SSID = connectWiFi(wifiJson);
+  M5.Display.println("WiFi: "+SSID);
+  if (SSID != "") {
+    while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
+      delay(1000);
+    }
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    syncTime();
+  }
+  dateTime = M5.Rtc.getDateTime();
+  lastSync = dateTime.date.date+(dateTime.date.month<<5);
+  WiFi.disconnect(true);
+}
+
 void notice(String title, String time) {
   M5.Display.wakeup();
   M5.Display.setBrightness(63);
@@ -555,6 +578,7 @@ void settings_init() {
   appUI->setTitle("Settings");
   appUI->addItem((String) "lpsleep", callLowPowSleep, (String) "Low Power Sleep");
   appUI->addItem((String) "shutdown", powerOff, (String) "Shutdown");
+  appUI->addItem((String) "synctime", syncTimeOnSettings, (String) "Sync Time");
   appUI->linkFunctionToBack(appEnd);
   appUI->makeUI(lang);
 }
@@ -1342,9 +1366,16 @@ void updateDigitals() {
   if (!spDatesJson[String(dateTime.date.month)].isNull()) {
     if (!spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)].isNull()) {
       dateY = 0;
-      int dayColor = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)]["color"];
+      if (birthChangeTimer+5000 < millis()) {
+        birthChangeTimer = millis();
+        birthChangeID++;
+        if (birthChangeID >= spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)].size()) {
+          birthChangeID = 0;
+        }
+      }
+      int dayColor = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color"];
       cv_day.setTextColor(M5.Display.color24to16(dayColor), TFT_BLACK);
-      String dayName = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)]["name"];
+      String dayName = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["name"];
       cv_day.drawString(dayName, 0, 17, &fonts::Font2);
     } else {
       dateY = 17;
