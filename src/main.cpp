@@ -1,7 +1,12 @@
 /*
-  [ MK75-Watch ] by K-Nana
+  [ MK75-Watch Ver.2β ] by K-Nana
   Smartwatch Firmware for M5Stack Core2.
   MIT License https://opensource.org/license/mit
+
+  < WARNING: Beta version >
+  This is a development version not intended for general use. 
+  Unexpected issues may occur. 
+  It is available for those who want to test new features early.
 */
 
 #include <M5Unified.h>
@@ -51,33 +56,37 @@ String UIAddtional = "";
 uint8_t UItimeLeft;
 uint8_t UItimeRight;
 
-const int sizeX = 320;
-const int centerX = sizeX/2;
-const int sizeY = 240;
-const int centerY = sizeY/2;
-const int ckCenterX = 110;
-const int ckCenterY = 110;
-const int JST = 32400;
+const int32_t sizeX = 320;
+const int32_t centerX = sizeX/2;
+const int32_t sizeY = 240;
+const int32_t centerY = sizeY/2;
+const int32_t ckCenterX = 110;
+const int32_t ckCenterY = 110;
+const int32_t JST = 32400;
 const String week[7] = {"Sun", "Mon", "Tue", "Wed", "Thr", "Fri", "Sat"};
 const String apps[6] = {"timer", "settings", "alarm", "commander", "stopwatch", "train"};
-const String appsEn[6] = {"Timer", "Settings", "Alarm", "Commander", "Stopwatch", "Train"};
-const String appsJa[6] = {"タイマー", "設定", "アラーム", "コマンダー", "ストップWt", "時刻表"};
+const String appsEn[6] = {"Timer", "Settings", "Alarm", "?", "Stopwatch", "Train"};
+const String appsJa[6] = {"タイマー", "設定", "アラーム", "?", "ストップWt", "時刻表"};
 String M5Model;
 
-int slpTimer = 10000;
-int vibTimer = 0;
-int screenSwipe = 0;
-int prevTX = 0;
-int prevTY = 0;
-int firstTX = 0;
-int firstTY = 0;
-int cycle = 0;
-int prevLoopTime = 0;
-int prevSwipeAcc[6] = {0, 0, 0, 0, 0, 0};
-int appStart = 0;
-int checkAlarmTimer = 0;
+int32_t slpTimer = 10000;
+int32_t vibTimer = 0;
+int32_t screenSwipe = 0;
+int32_t screenSwipeVertical = 0;
+int32_t screenSwipeVerticalFirst = 0;
+int32_t prevTX = 0;
+int32_t prevTY = 0;
+int32_t firstTX = 0;
+int32_t firstTY = 0;
+int32_t cycle = 0;
+int32_t prevLoopTime = 0;
+int32_t prevSwipeAcc[4] = {0, 0, 0, 0};
+int32_t appStart = 0;
+int32_t checkAlarmTimer = 0;
 uint8_t lastAlarmMin = 60;
 uint16_t lastSync = 0;
+int32_t birthChangeTimer = 0;
+uint8_t birthChangeID = 0;
 
 float mpu[3] = {0, 0, 0};
 float prevGyro[5] = {0, 0, 0, 0, 0};
@@ -86,21 +95,20 @@ bool wasVBUS = false;
 bool wasTouched = false;
 bool afterSlp = false;
 bool haveToDeleteAppUI = false;
+bool appMenu = false;
 
 uint8_t battery = M5.Power.getBatteryLevel();
 m5::rtc_datetime_t dateTime = M5.Rtc.getDateTime();
 
 void nothing() {}
 
-void thickLine(M5Canvas target, int x0, int y0, int x1, int y1, int color) {
+void thickLine(M5Canvas target, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t color) {
   target.drawLine(x0, y0, x1, y1, color);
   target.drawLine(x0+1, y0, x1+1, y1, color);
   target.drawLine(x0-1, y0, x1-1, y1, color);
   target.drawLine(x0, y0+1, x1, y1+1, color);
   target.drawLine(x0, y0-1, x1, y1-1, color);
 }
-
-
 
 String boolStr(bool target, String ifTrue, String ifFalse) {
   if (target) {
@@ -110,7 +118,7 @@ String boolStr(bool target, String ifTrue, String ifFalse) {
   }
 }
 
-uint32_t batcolor(int bat) {
+uint32_t batcolor(int32_t bat) {
   float r, g;
   if (bat <= 50) {
     r = 255;
@@ -170,7 +178,7 @@ void appEnd() {
 }
 
 // Powered by ChatGPT
-bool isHoliday(int month, int day, int year, int weekday) {
+bool isHoliday(int32_t month, int32_t day, int32_t year, int32_t weekday) {
   if (month == 1 && day == 1) return true;
   if (month == 1 && weekday == 1 && day >= 8 && day <= 14) return true;
   if (month == 2 && day == 11) return true;
@@ -193,7 +201,15 @@ bool isHoliday(int month, int day, int year, int weekday) {
   return false;
 }
 
-String readSPIJson(String filename, JsonDocument *target, int timeout) {
+int monthLastDay(int month, int year) {
+  if (month == 2) {
+    if (year%4 == 0 and (year%100 != 0 or year%400 == 0)) return 29;
+    else return 28;
+  } else if (month == 4 or month == 6 or month == 9 or month == 11) return 30;
+  return 31;
+}
+
+String readSPIJson(String filename, JsonDocument *target, int32_t timeout) {
   JsonDocument temp;
   File file = SPIFFS.open(filename, FILE_READ);
   if (file) {
@@ -231,7 +247,7 @@ bool checkGyro() {
   M5.Imu.getGyro(&mpu[0], &mpu[1], &mpu[2]);
   float sum = 0;
   prevGyro[0] = mpu[0];
-  for (short i = 4; i >= 0; i--) {
+  for (int8_t i = 4; i >= 0; i--) {
     sum += prevGyro[i];
     if (i != 5) {
       prevGyro[i+1] = prevGyro[i];
@@ -250,8 +266,8 @@ String connectWiFi(JsonDocument conf) {
   String bestSSID = "";
   int8_t bestRSSI = -128;
   if (!conf.isNull()) {
-    int n = WiFi.scanNetworks();
-    for (int i = 0; i < n; ++i) {
+    int32_t n = WiFi.scanNetworks();
+    for (int32_t i = 0; i < n; ++i) {
       //Serial.println(WiFi.SSID(i));
       if (!conf[WiFi.SSID(i)].isNull()) {
         if (bestRSSI < WiFi.RSSI(i)) {
@@ -272,7 +288,7 @@ String connectWiFi(JsonDocument conf) {
 
 bool connectWiFi() {
   WiFi.begin();
-  int timer = 0;
+  int32_t timer = 0;
   while (WiFi.status() != WL_CONNECTED and timer < 100){
       delay(100);
       timer++;
@@ -289,7 +305,7 @@ String connectHTTP(String url) {
   String body;
   if (http.begin(client, url)) {
     //http.addHeader("Content-Type", "application/json");
-    int responseCode = http.GET();
+    int32_t responseCode = http.GET();
     body = http.getString();
     http.end();
   } else {
@@ -315,7 +331,7 @@ void setRTCFromUNIX(time_t unixTime) {
 }
 
 String syncTime() {
-  int tmrStart = millis();
+  int32_t tmrStart = millis();
   String timeResp = connectHTTP("http://worldtimeapi.org/api/timezone/Japan");
   if (timeResp != "") {
     //Serial.println(timeResp);
@@ -325,13 +341,34 @@ String syncTime() {
       String errorMsg = error.c_str();
       return "json:"+errorMsg;
     } else {
-      int time = timeRespJSON["unixtime"];
+      int32_t time = timeRespJSON["unixtime"];
       setRTCFromUNIX(time+JST+ceil((millis()-tmrStart)/2000));
       return "";
     }
   } else {
     return "no resp";
   }
+}
+
+void syncTimeOnSettings() {
+  M5.Display.clear();
+  M5.Display.setCursor(0, 0);
+  M5.Display.setTextColor(WHITE, BLACK);
+  M5.Display.println("Time Sync...");
+  long wifiTimer = millis();
+  String SSID = connectWiFi(wifiJson);
+  M5.Display.println("WiFi: "+SSID);
+  if (SSID != "") {
+    while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
+      delay(1000);
+    }
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    syncTime();
+  }
+  dateTime = M5.Rtc.getDateTime();
+  lastSync = dateTime.date.date+(dateTime.date.month<<5);
+  WiFi.disconnect(true);
 }
 
 void notice(String title, String time) {
@@ -346,7 +383,7 @@ void notice(String title, String time) {
   M5.Speaker.setVolume(200);
   uint16_t soundTimer = 2000;
   while (true) {
-    int loopTimer = millis();
+    int32_t loopTimer = millis();
     if (soundTimer == 2000) {
       soundTimer = 0;
       M5.Speaker.playWav(alarm_sound);
@@ -367,8 +404,8 @@ bool checkAlarm() {
   for( JsonObject loopAlarm : alarmJson.as<JsonArray>() ) {
     bool isWeekend = (dateTime.date.weekDay == 0 || dateTime.date.weekDay == 6);
     if ((isWeekend && loopAlarm["weekend"]) || (!isWeekend && loopAlarm["weekday"])) {
-      int hour = loopAlarm["hour"];
-      int min = loopAlarm["min"];
+      int32_t hour = loopAlarm["hour"];
+      int32_t min = loopAlarm["min"];
       if (dateTime.time.minutes != lastAlarmMin) {
         lastAlarmMin = 60;
       }
@@ -393,13 +430,22 @@ bool checkTimer() {
   return false;
 }
 
-void scrollsWhenTouch(m5::touch_detail_t detail, int* target) {
+void scrollsWhenTouch(m5::touch_detail_t detail, int32_t* target, bool vertical = false) {
+  int32_t now;
+  int32_t prev;
+  if (vertical) {
+    now = detail.y;
+    prev = prevTY;
+  } else {
+    now = detail.x;
+    prev = prevTX;
+  }
   if (prevTX != -1) {
-    *target += prevTX-detail.x;
-    for (uint8_t i = 0; i < 5; i++) {
+    *target += prev-now;
+    for (uint8_t i = 0; i < 3; i++) {
       prevSwipeAcc[i] = prevSwipeAcc[i+1];
     }
-    prevSwipeAcc[5] = prevTX-detail.x;
+    prevSwipeAcc[3] = prev-now;
   }
   prevTX = detail.x;
   prevTY = detail.y;
@@ -409,26 +455,26 @@ void scrollsWhenTouch(m5::touch_detail_t detail, int* target) {
   }
 }
 
-void scrollsWhenNotTouch(int* target, int indexes) {
+void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, bool useAcc = true) {
   if (*target < 0) {
     *target += (0-*target)/2;
     *target = round(*target);
     if (abs(*target) <= 1) *target = 0;
-  } else if (*target > (indexes-1)*sizeX) {
-    *target += (((indexes-1)*sizeX)-*target)/2;
+  } else if (*target > (indexes-1)*distant) {
+    *target += (((indexes-1)*distant)-*target)/2;
     *target = round(*target);
-    if (abs(*target-((indexes-1)*sizeX)) <= 1) *target = ((indexes-1)*sizeX);
-  } else if (*target % sizeX != 0) {
-    short maxAcc = 0;
-    for (uint8_t i = 0; i < 6; i++) {
+    if (abs(*target-((indexes-1)*distant)) <= 1) *target = ((indexes-1)*distant);
+  } else if (*target % distant != 0) {
+    int8_t maxAcc = 0;
+    for (uint8_t i = 0; i < 4; i++) {
       if (prevSwipeAcc[i] < 0 and prevSwipeAcc[i] < maxAcc) {
         maxAcc = prevSwipeAcc[i];
       } else if (prevSwipeAcc[i] > 0 and prevSwipeAcc[i] > maxAcc) {
         maxAcc = prevSwipeAcc[i];
       }
     }
-    int calib = limit(maxAcc*10, -160, 160);
-    int swipeTarget = limit(round(((float) (*target+calib)/sizeX))*sizeX, 0, (indexes-1)*sizeX);
+    int32_t calib = limit(maxAcc*10, -(distant/2), distant/2);
+    int32_t swipeTarget = limit(round(((float) (*target+calib)/distant))*distant, 0, (indexes-1)*distant);
     *target += (swipeTarget-*target)/2;
     if (abs(*target-swipeTarget) <= 1) *target = swipeTarget;
   }
@@ -447,7 +493,7 @@ void lowPowSleep() {
   while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
     dateTime = M5.Rtc.getDateTime();
     if (checkAlarm() || checkTimer()) break;
-    if (lastSync != dateTime.date.date+(dateTime.date.month<<5)) {
+    if (lastSync != dateTime.date.date+(dateTime.date.month*32)) {
       M5.Power.setLed(255);
       long wifiTimer = millis();
       String SSID = connectWiFi(wifiJson);
@@ -555,6 +601,7 @@ void settings_init() {
   appUI->setTitle("Settings");
   appUI->addItem((String) "lpsleep", callLowPowSleep, (String) "Low Power Sleep");
   appUI->addItem((String) "shutdown", powerOff, (String) "Shutdown");
+  appUI->addItem((String) "synctime", syncTimeOnSettings, (String) "Sync Time");
   appUI->linkFunctionToBack(appEnd);
   appUI->makeUI(lang);
 }
@@ -597,8 +644,8 @@ void alarm_init() {
   appUI->addItem("add", alarm_add, "+ Add Alarm");
   uint8_t cnt = 0;
   for( JsonObject loopAlarm : alarmJson.as<JsonArray>() ) {
-    int hour = loopAlarm["hour"];
-    int min = loopAlarm["min"];
+    int32_t hour = loopAlarm["hour"];
+    int32_t min = loopAlarm["min"];
     appUI->addItem((String) cnt, alarm_config, forceDigits(hour, 2)+":"+forceDigits(min, 2));
     cnt++;
   }
@@ -704,7 +751,7 @@ void alarm_loop() {
 // Stopwatch
 long stwts[5] = {0, 0, 0, 0, 0};
 long stwts_stop[5] = {0, 0, 0, 0, 0};
-int stwt_swipe = 0;
+int32_t stwt_swipe = 0;
 uint8_t stwt_touchedID = 0;
 uint16_t stwt_touchedTime = 0;
 bool stwt_afterReset = false;
@@ -804,7 +851,7 @@ void stopwatch_loop() {
       }
     }
   } else {
-    scrollsWhenNotTouch(&stwt_swipe, 5);
+    scrollsWhenNotTouch(&stwt_swipe, 5, sizeX);
     stwt_wasTouched = false;
     stwt_afterReset = false;
     stwt_touchedTime = 0;
@@ -835,7 +882,7 @@ void stopwatch_loop() {
 // Train
 String timetableName = "";
 bool train_isMainUI = false;
-int train_refleshTimer;
+int32_t train_refleshTimer;
 bool isWeekend;
 bool isRemainingMode = false;
 
@@ -983,7 +1030,7 @@ void train_loop() {
           }
         }
       }
-      int loopHourAdd = 0;
+      int32_t loopHourAdd = 0;
       while (min[2] == 60) {
         loopHourAdd = (loopHourAdd+1)%24;
         for ( const auto loopTimetable : timetable[String(dateTime.time.hours+loopHourAdd)].as<JsonArray>() ) {
@@ -1292,7 +1339,7 @@ void makeClockBase() {
   cv_ckbase.fillCircle(ckCenterX, ckCenterY, 110, TFT_WHITE);
   cv_ckbase.fillCircle(ckCenterX, ckCenterY, 105, TFT_BLACK);
   float deg;
-  for (short i = 0; i < 12; i++) {
+  for (int8_t i = 0; i < 12; i++) {
     deg = i*0.523;
     if (i == 6) {
       cv_ckbase.setCursor((sin(deg)*93)+ckCenterX-14, (cos(deg)*93)+ckCenterY-13);
@@ -1342,9 +1389,16 @@ void updateDigitals() {
   if (!spDatesJson[String(dateTime.date.month)].isNull()) {
     if (!spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)].isNull()) {
       dateY = 0;
-      int dayColor = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)]["color"];
+      if (birthChangeTimer+5000 < millis()) {
+        birthChangeTimer = millis();
+        birthChangeID++;
+        if (birthChangeID >= spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)].size()) {
+          birthChangeID = 0;
+        }
+      }
+      int32_t dayColor = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color"];
       cv_day.setTextColor(M5.Display.color24to16(dayColor), TFT_BLACK);
-      String dayName = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)]["name"];
+      String dayName = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["name"];
       cv_day.drawString(dayName, 0, 17, &fonts::Font2);
     } else {
       dateY = 17;
@@ -1354,9 +1408,9 @@ void updateDigitals() {
   }
   cv_day.setTextColor(TFT_WHITE, TFT_BLACK);
   cv_day.drawString(String(dateTime.date.month)+"/"+String(dateTime.date.date)+" "+week[dateTime.date.weekDay]+" "+dateTime.date.year, 0, dateY, &fonts::Font2);
-  int ramFree = (int) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
-  int ramTotal = (int) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
-  cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB", sizeX, 17, &fonts::Font2);
+  int32_t ramFree = (int32_t) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
+  int32_t ramTotal = (int32_t) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
+  cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB "+prevLoopTime+"ms/f", sizeX, 17, &fonts::Font2);
 }
 
 bool copySDtoSPI() {
@@ -1377,8 +1431,8 @@ bool copySDtoSPI() {
       if (SPIFFS.exists(fileName)) {SPIFFS.remove(fileName);}
       File SDCardFile = SD.open(SDPath, FILE_READ);
       File SPIFile = SPIFFS.open(SPIPath, FILE_WRITE);
-      int size = SDCardFile.size();
-      int progress = 0;
+      int32_t size = SDCardFile.size();
+      int32_t progress = 0;
       while (SDCardFile.available()) {
         //if (progress % 1000 == 0) Serial.println(SPIPath + " " + (((float) progress/(float) size)*100) + "% " + progress + "/" + size);
         uint8_t chr1 = SDCardFile.peek();
@@ -1479,72 +1533,30 @@ void setupConfigs() {
 void setupSprites() {
   cv_display.createSprite(sizeX, sizeY);
   cv_clock.createSprite(220, 220);
-  cv_menu.createSprite(sizeX, 220);
+  cv_menu.createSprite(100, 240);
   makeClockBase();
   cv_dtime_bat.createSprite(sizeX, 17);
   cv_day.createSprite(sizeX, 34);
 }
 
-void setupMenu() {
+void drawMenu() {
+  cv_menu.clear();
   cv_menu.setFont(&lgfxJapanMincho_40);
-  for (short ix = -1; ix < 2; ix++) {
-    for (short iy = 0; iy < 2; iy++) {
-      cv_menu.fillRect(((ix*105)-50)+(sizeX/2), ((iy*85)-88)+(sizeY/2), 100, 80, TFT_WHITE);
-      cv_menu.fillRect(((ix*105)-47)+(sizeX/2), ((iy*85)-85)+(sizeY/2), 94, 74, TFT_BLACK);
-      cv_menu.pushImage(((ix*105)-16)+(sizeX/2), ((iy*85)-80)+(sizeY/2), 32, 32, icons[(ix+1)+(iy*3)]);
-      cv_menu.setTextColor(TFT_WHITE, TFT_BLACK);
+  for (int8_t i = 0; i < 6; i++) {
+    if (inLimit(i*120, screenSwipeVertical-220, screenSwipeVertical+220)) {
+      // パフォーマンス重視ならfillRoundRectではなくfillRectを使うべきかもしれない
+      cv_menu.fillRoundRect(105-screenSwipe, (i*120)+75-screenSwipeVertical, 90, 90, 5, WHITE);
+      cv_menu.fillRoundRect(110-screenSwipe, (i*120)+80-screenSwipeVertical, 80, 80, 4, BLACK);
+      cv_menu.pushImage(134-screenSwipe, (i*120)+104-screenSwipeVertical, 32, 32, icons[i]);
       if (lang == "ja") {
-        cv_menu.drawCenterString(appsJa[(ix+1)+(iy*3)], (ix*105)+(sizeX/2), ((iy*85)-45)+(sizeY/2), &fonts::efontJA_16);
+        cv_menu.drawCenterString(appsJa[i], 150-screenSwipe, (i*120)+140-screenSwipeVertical, &fonts::efontJA_16);
       } else if (lang == "en") {
-        cv_menu.drawCenterString(appsEn[(ix+1)+(iy*3)], (ix*105)+(sizeX/2), ((iy*85)-45)+(sizeY/2), &fonts::Font2);
+        cv_menu.drawCenterString(appsEn[i], 150-screenSwipe, (i*120)+140-screenSwipeVertical, &fonts::Font2);
       } else {
         //cv_menu.drawCenterString("ERROR. LOL", (ix*105)+(sizeX/2), ((iy*85)-45)+(sizeY/2), &fonts::Font2);
       }
     }
   }
-}
-
-void loopTouch() {
-  int touch = M5.Touch.getCount();
-  if (touch) {
-    scrollsWhenTouch(M5.Touch.getDetail(), &screenSwipe);
-  } else {
-    if (wasTouched and screenSwipe <= 340 and screenSwipe >= 300) {
-      for (short lax = -1; lax < 2; lax++) {
-        for (short lay = 0; lay < 2; lay++) {
-          int appx = ((lax*105)-50)+(sizeX/2);
-          int appy = ((lay*85)-40)+(sizeY/2);
-          if ((appx <= prevTX) and (appx+100 >= prevTX) and (appy <= prevTY) and (appy+80 >= prevTY) and (appx <= firstTX) and (appx+100 >= firstTX) and (appy <= firstTY) and (appy+80 >= firstTY)) {
-            vibTimer = 200;
-            if (lax == 0 and lay == 0) {
-              nowApp = "settings";
-              settings_init();
-            } else if (lax == 1 and lay == 1) {
-              nowApp = "train";
-              train_init();
-            } else if (lax == 1 and lay == 0) {
-              nowApp = "alarm";
-              alarm_init();
-            } else if (lax == 0 and lay == 1) {
-              nowApp = "stopwatch";
-              stopwatch_init();
-            } else if (lax == -1 and lay == 0) {
-              nowApp = "timer";
-              timer_init();
-            } else if (lax == -1 and lay == 1) {
-              nowApp = "commander";
-              commander_init();
-            } else {
-              nowApp = "settings";
-              settings_init_another();
-            }
-          }
-        }
-      }
-    }
-    scrollsWhenNotTouch(&screenSwipe, 2);
-  }
-  wasTouched = (touch > 0);
 }
 
 void loopSleep() {
@@ -1577,6 +1589,80 @@ void loopSleep() {
   }
 }
 
+void loopMenuTouch() {
+  if (!afterSlp) {
+    if (M5.Touch.getCount() > 0) {
+      m5::Touch_Class::touch_detail_t tDetail = M5.Touch.getDetail();
+      if (tDetail.wasPressed()) {
+        for (int8_t i = 0; i < 4; i++) {
+          prevSwipeAcc[i] = 0;
+        }
+        //screenSwipeVerticalFirst = screenSwipeVertical;
+        if (tDetail.x < 220 or !appMenu) {
+          appMenu = !appMenu;
+        }
+      }
+      if (tDetail.base_x >= 220) {
+        //screenSwipeVertical = screenSwipeVerticalFirst - tDetail.distanceY();
+        scrollsWhenTouch(tDetail, &screenSwipeVertical, true);
+        if (tDetail.wasClicked() and !tDetail.isDragging() and !tDetail.isFlicking()) {
+          for (int8_t i = 0; i < 6; i++) {
+            if (inLimit(tDetail.x, 225, 315) and inLimit(tDetail.y, (i*120)+75-screenSwipeVertical, (i*120)+165-screenSwipeVertical)) {
+              if (i == 0) {
+                nowApp = "timer";
+                timer_init();
+              } else if (i == 1) {
+                nowApp = "settings";
+                settings_init();
+              } else if (i == 2) {
+                nowApp = "alarm";
+                alarm_init();
+              } else if (i == 3) {
+                //nowApp = "timer";
+                //timer_init();
+              } else if (i == 4) {
+                nowApp = "stopwatch";
+                stopwatch_init();
+              } else if (i == 5) {
+                nowApp = "train";
+                train_init();
+              }
+            }
+          } 
+        }
+      }
+    } else {
+      scrollsWhenNotTouch(&screenSwipeVertical, 6, 120, false);
+    }
+  }
+}
+
+void loopTimeSel() {
+  cv_timesel.pushSprite(centerX-150, centerY-60);
+  if (M5.Touch.getCount() > 0) {
+    m5::Touch_Class::touch_detail_t tDetail = M5.Touch.getDetail();
+    if (tDetail.wasPressed() || tDetail.isHolding()) {
+      if (inLimit(tDetail.x, 40, 140) && inLimit(tDetail.y, 50, 110)) {
+        UItimeLeft++;
+        if (UItimeLeft == 24) UItimeLeft = 0;
+        drawTimeUI();
+      } else if (inLimit(tDetail.x, 180, 280) && inLimit(tDetail.y, 50, 110)) {
+        UItimeRight++;
+        if (UItimeRight == 60) UItimeRight = 0;
+        drawTimeUI();
+      } else if (inLimit(tDetail.x, 40, 140) && inLimit(tDetail.y, 175, 235)) {
+        UItimeLeft--;
+        if (UItimeLeft == 255) UItimeLeft = 23;
+        drawTimeUI();
+      } else if (inLimit(tDetail.x, 180, 280) && inLimit(tDetail.y, 175, 235)) {
+        UItimeRight--;
+        if (UItimeRight == 255) UItimeRight = 59;
+        drawTimeUI();
+      }
+    }
+  }
+}
+
 void setup() {
   auto cfg = M5.config();
   cfg.internal_imu = true;
@@ -1588,12 +1674,12 @@ void setup() {
   M5.Display.setBrightness(63);
   setupConfigs();
   setupSprites();
-  setupMenu();
+  //setupMenu();
   wasVBUS = M5.Power.Axp2101.isVBUS();
 }
 
 void loop() {
-  int tmrStart = millis();
+  int32_t tmrStart = millis();
   M5.update();
   if (nowApp != "commander") cv_display.clear();
   bool touch = (M5.Touch.getCount() > 0);
@@ -1614,30 +1700,9 @@ void loop() {
     if (nowApp != "") appEnd();
   }
   if (M5.BtnC.wasPressed()) {}
+  // 時間入力
   if (UIAddtional == "time") {
-    cv_timesel.pushSprite(centerX-150, centerY-60);
-    if (M5.Touch.getCount() > 0) {
-      m5::Touch_Class::touch_detail_t tDetail = M5.Touch.getDetail();
-      if (tDetail.wasPressed() || tDetail.isHolding()) {
-        if (inLimit(tDetail.x, 40, 140) && inLimit(tDetail.y, 50, 110)) {
-          UItimeLeft++;
-          if (UItimeLeft == 24) UItimeLeft = 0;
-          drawTimeUI();
-        } else if (inLimit(tDetail.x, 180, 280) && inLimit(tDetail.y, 50, 110)) {
-          UItimeRight++;
-          if (UItimeRight == 60) UItimeRight = 0;
-          drawTimeUI();
-        } else if (inLimit(tDetail.x, 40, 140) && inLimit(tDetail.y, 175, 235)) {
-          UItimeLeft--;
-          if (UItimeLeft == 255) UItimeLeft = 23;
-          drawTimeUI();
-        } else if (inLimit(tDetail.x, 180, 280) && inLimit(tDetail.y, 175, 235)) {
-          UItimeRight--;
-          if (UItimeRight == 255) UItimeRight = 59;
-          drawTimeUI();
-        }
-      }
-    }
+    loopTimeSel();
   }
   if (nowApp == "settings") {
     settings_loop();
@@ -1652,20 +1717,25 @@ void loop() {
   } else if (nowApp == "commander") {
     commander_loop();
   } else {
-    loopTouch();
-    if ((screenSwipe % sizeX != 0) or (screenSwipe == sizeX)) cv_menu.pushSprite(&cv_display, sizeX-screenSwipe, centerY-ckCenterY, TFT_BLACK);
-    if ((screenSwipe % sizeX != 0) or (screenSwipe == 0)) {
-      updateClock();
-      cv_clock.pushSprite(&cv_display, centerX-ckCenterX-screenSwipe, centerY-ckCenterY, TFT_BLACK);
+    // アプリサイドバーの開閉
+    loopMenuTouch();
+    // アプリサイドバーの調整
+    if (appMenu) {
+        // 目標値100
+        screenSwipe = ceil((screenSwipe-100)/2)+100;
+    } else {
+        // 目標値0
+        screenSwipe = floor(screenSwipe/2);
     }
-    if (M5.BtnA.wasPressed()) {
-      screenSwipe = 0;
-    }
+    updateClock();
+    cv_clock.pushSprite(&cv_display, centerX-ckCenterX-round(screenSwipe/2), centerY-ckCenterY, TFT_BLACK);
     updateDigitals();
-    M5.update();
-    //loopTouch();
     cv_day.pushSprite(&cv_display, 1, sizeY-34, TFT_BLACK);
     cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
+    if (screenSwipe != 0) {
+      drawMenu();
+      cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
+    }
     cv_display.pushSprite(0, 0);
   }
   if (checkAlarmTimer > 10000) {
