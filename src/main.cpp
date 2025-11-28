@@ -1,9 +1,9 @@
 /*
-  [ MK75-Watch Ver.2α ] by K-Nana
+  [ MK75-Watch Ver.2β ] by K-Nana
   Smartwatch Firmware for M5Stack Core2.
   MIT License https://opensource.org/license/mit
 
-  < WARNING: Alpha version >
+  < WARNING: Beta version >
   This is a development version not intended for general use. 
   Unexpected issues may occur. 
   It is available for those who want to test new features early.
@@ -1539,36 +1539,22 @@ void setupSprites() {
   cv_day.createSprite(sizeX, 34);
 }
 
-/*
-void setupMenu() {
-  cv_menu.setFont(&lgfxJapanMincho_40);
-  for (int8_t ix = -1; ix < 2; ix++) {
-    for (int8_t iy = 0; iy < 2; iy++) {
-      cv_menu.fillRect(((ix*105)-50)+(sizeX/2), ((iy*85)-88)+(sizeY/2), 100, 80, TFT_WHITE);
-      cv_menu.fillRect(((ix*105)-47)+(sizeX/2), ((iy*85)-85)+(sizeY/2), 94, 74, TFT_BLACK);
-      cv_menu.pushImage(((ix*105)-16)+(sizeX/2), ((iy*85)-80)+(sizeY/2), 32, 32, icons[(ix+1)+(iy*3)]);
-      cv_menu.setTextColor(TFT_WHITE, TFT_BLACK);
-      if (lang == "ja") {
-        cv_menu.drawCenterString(appsJa[(ix+1)+(iy*3)], (ix*105)+(sizeX/2), ((iy*85)-45)+(sizeY/2), &fonts::efontJA_16);
-      } else if (lang == "en") {
-        cv_menu.drawCenterString(appsEn[(ix+1)+(iy*3)], (ix*105)+(sizeX/2), ((iy*85)-45)+(sizeY/2), &fonts::Font2);
-      } else {
-        //cv_menu.drawCenterString("ERROR. LOL", (ix*105)+(sizeX/2), ((iy*85)-45)+(sizeY/2), &fonts::Font2);
-      }
-    }
-  }
-}
-*/
-
 void drawMenu() {
   cv_menu.clear();
   cv_menu.setFont(&lgfxJapanMincho_40);
-  for (int8_t i = 0; i < 5; i++) {
+  for (int8_t i = 0; i < 6; i++) {
     if (inLimit(i*120, screenSwipeVertical-220, screenSwipeVertical+220)) {
       // パフォーマンス重視ならfillRoundRectではなくfillRectを使うべきかもしれない
       cv_menu.fillRoundRect(105-screenSwipe, (i*120)+75-screenSwipeVertical, 90, 90, 5, WHITE);
       cv_menu.fillRoundRect(110-screenSwipe, (i*120)+80-screenSwipeVertical, 80, 80, 4, BLACK);
       cv_menu.pushImage(134-screenSwipe, (i*120)+104-screenSwipeVertical, 32, 32, icons[i]);
+      if (lang == "ja") {
+        cv_menu.drawCenterString(appsJa[i], 150-screenSwipe, (i*120)+140-screenSwipeVertical, &fonts::efontJA_16);
+      } else if (lang == "en") {
+        cv_menu.drawCenterString(appsEn[i], 150-screenSwipe, (i*120)+140-screenSwipeVertical, &fonts::Font2);
+      } else {
+        //cv_menu.drawCenterString("ERROR. LOL", (ix*105)+(sizeX/2), ((iy*85)-45)+(sizeY/2), &fonts::Font2);
+      }
     }
   }
 }
@@ -1619,9 +1605,60 @@ void loopMenuTouch() {
       if (tDetail.base_x >= 220) {
         //screenSwipeVertical = screenSwipeVerticalFirst - tDetail.distanceY();
         scrollsWhenTouch(tDetail, &screenSwipeVertical, true);
+        if (tDetail.wasClicked() and !tDetail.isDragging() and !tDetail.isFlicking()) {
+          for (int8_t i = 0; i < 6; i++) {
+            if (inLimit(tDetail.x, 225, 315) and inLimit(tDetail.y, (i*120)+75-screenSwipeVertical, (i*120)+165-screenSwipeVertical)) {
+              if (i == 0) {
+                nowApp = "timer";
+                timer_init();
+              } else if (i == 1) {
+                nowApp = "settings";
+                settings_init();
+              } else if (i == 2) {
+                nowApp = "alarm";
+                alarm_init();
+              } else if (i == 3) {
+                //nowApp = "timer";
+                //timer_init();
+              } else if (i == 4) {
+                nowApp = "stopwatch";
+                stopwatch_init();
+              } else if (i == 5) {
+                nowApp = "train";
+                train_init();
+              }
+            }
+          } 
+        }
       }
     } else {
-      scrollsWhenNotTouch(&screenSwipeVertical, 5, 120, false);
+      scrollsWhenNotTouch(&screenSwipeVertical, 6, 120, false);
+    }
+  }
+}
+
+void loopTimeSel() {
+  cv_timesel.pushSprite(centerX-150, centerY-60);
+  if (M5.Touch.getCount() > 0) {
+    m5::Touch_Class::touch_detail_t tDetail = M5.Touch.getDetail();
+    if (tDetail.wasPressed() || tDetail.isHolding()) {
+      if (inLimit(tDetail.x, 40, 140) && inLimit(tDetail.y, 50, 110)) {
+        UItimeLeft++;
+        if (UItimeLeft == 24) UItimeLeft = 0;
+        drawTimeUI();
+      } else if (inLimit(tDetail.x, 180, 280) && inLimit(tDetail.y, 50, 110)) {
+        UItimeRight++;
+        if (UItimeRight == 60) UItimeRight = 0;
+        drawTimeUI();
+      } else if (inLimit(tDetail.x, 40, 140) && inLimit(tDetail.y, 175, 235)) {
+        UItimeLeft--;
+        if (UItimeLeft == 255) UItimeLeft = 23;
+        drawTimeUI();
+      } else if (inLimit(tDetail.x, 180, 280) && inLimit(tDetail.y, 175, 235)) {
+        UItimeRight--;
+        if (UItimeRight == 255) UItimeRight = 59;
+        drawTimeUI();
+      }
     }
   }
 }
@@ -1665,29 +1702,7 @@ void loop() {
   if (M5.BtnC.wasPressed()) {}
   // 時間入力
   if (UIAddtional == "time") {
-    cv_timesel.pushSprite(centerX-150, centerY-60);
-    if (M5.Touch.getCount() > 0) {
-      m5::Touch_Class::touch_detail_t tDetail = M5.Touch.getDetail();
-      if (tDetail.wasPressed() || tDetail.isHolding()) {
-        if (inLimit(tDetail.x, 40, 140) && inLimit(tDetail.y, 50, 110)) {
-          UItimeLeft++;
-          if (UItimeLeft == 24) UItimeLeft = 0;
-          drawTimeUI();
-        } else if (inLimit(tDetail.x, 180, 280) && inLimit(tDetail.y, 50, 110)) {
-          UItimeRight++;
-          if (UItimeRight == 60) UItimeRight = 0;
-          drawTimeUI();
-        } else if (inLimit(tDetail.x, 40, 140) && inLimit(tDetail.y, 175, 235)) {
-          UItimeLeft--;
-          if (UItimeLeft == 255) UItimeLeft = 23;
-          drawTimeUI();
-        } else if (inLimit(tDetail.x, 180, 280) && inLimit(tDetail.y, 175, 235)) {
-          UItimeRight--;
-          if (UItimeRight == 255) UItimeRight = 59;
-          drawTimeUI();
-        }
-      }
-    }
+    loopTimeSel();
   }
   if (nowApp == "settings") {
     settings_loop();
