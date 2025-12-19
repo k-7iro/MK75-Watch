@@ -17,12 +17,18 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <esp_sntp.h>
 #include <map>
 #include "assets/images.hpp"
 #include "assets/sounds.hpp"
 #include "libs/NanaUI.hpp"
 #include "libs/NanaTools.hpp"
 #include "new"
+
+#define NTP_TIMEZONE "JST-9" //今後設定で変更可能にする
+#define NTP_SERVER1 "0.pool.ntp.org"
+#define NTP_SERVER2 "1.pool.ntp.org"
+#define NTP_SERVER3 "2.pool.ntp.org"
 
 static M5Canvas cv_display(&M5.Display);
 static M5Canvas cv_clock(&cv_display);
@@ -96,6 +102,7 @@ bool wasTouched = false;
 bool afterSlp = false;
 bool haveToDeleteAppUI = false;
 bool appMenu = false;
+bool touchedOnMenu = false;
 
 uint8_t battery = M5.Power.getBatteryLevel();
 m5::rtc_datetime_t dateTime = M5.Rtc.getDateTime();
@@ -278,7 +285,7 @@ String connectWiFi(JsonDocument conf) {
     }
   }
   if (bestSSID != "") {
-    Serial.println("Try to connect "+bestSSID+" ...");
+    //Serial.println("Try to connect "+bestSSID+" ...");
     String pass = conf[bestSSID];
     WiFi.begin(bestSSID, pass);
     return bestSSID;
@@ -314,40 +321,16 @@ String connectHTTP(String url) {
   return body;
 }
 
-void setRTCFromUNIX(time_t unixTime) {
-  struct tm *timeinfo;
-  timeinfo = localtime(&unixTime);
-  m5::rtc_time_t TimeStruct;
-  m5::rtc_date_t DateStruct;
-  TimeStruct.hours = timeinfo->tm_hour;
-  TimeStruct.minutes = timeinfo->tm_min;
-  TimeStruct.seconds = timeinfo->tm_sec;
-  M5.Rtc.setTime(TimeStruct);
-  //DateStruct.weekDay = timeinfo->tm_wday;
-  DateStruct.month = timeinfo->tm_mon + 1;
-  DateStruct.date = timeinfo->tm_mday;
-  DateStruct.year = timeinfo->tm_year + 1900;
-  M5.Rtc.setDate(DateStruct);
-}
-
-String syncTime() {
-  int32_t tmrStart = millis();
-  String timeResp = connectHTTP("http://worldtimeapi.org/api/timezone/Japan");
-  if (timeResp != "") {
-    //Serial.println(timeResp);
-    JsonDocument timeRespJSON;
-    DeserializationError error = deserializeJson(timeRespJSON, timeResp);
-    if (error) {
-      String errorMsg = error.c_str();
-      return "json:"+errorMsg;
-    } else {
-      int32_t time = timeRespJSON["unixtime"];
-      setRTCFromUNIX(time+JST+ceil((millis()-tmrStart)/2000));
-      return "";
-    }
-  } else {
-    return "no resp";
+void syncTime() {
+  long tmrStart = millis();
+  configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
+  while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED) {
+    delay(1000);
   }
+  time_t t = time(nullptr)+1; // Advance one second.
+  while (t > time(nullptr));  /// Synchronization in seconds
+  M5.Rtc.setDateTime(localtime(&t));
+  Serial.println("OK!");
 }
 
 void syncTimeOnSettings() {
@@ -357,14 +340,17 @@ void syncTimeOnSettings() {
   M5.Display.println("Time Sync...");
   long wifiTimer = millis();
   String SSID = connectWiFi(wifiJson);
-  M5.Display.println("WiFi: "+SSID);
   if (SSID != "") {
+    M5.Display.println("WiFi: "+SSID);
     while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
       delay(1000);
     }
   }
   if (WiFi.status() == WL_CONNECTED) {
+    M5.Display.println("Wi-Fi Ready");
     syncTime();
+  } else {
+    M5.Display.println("Wi-Fi Failed");
   }
   dateTime = M5.Rtc.getDateTime();
   lastSync = dateTime.date.date+(dateTime.date.month<<5);
@@ -667,7 +653,7 @@ void alarm_add() {
 
 void alarm_remove() {
   alarm_saved = false;
-  Serial.println(alarm_toConfig);
+  //Serial.println(alarm_toConfig);
   alarmJson.remove((size_t) alarm_toConfig);
   alarm_init();
 }
@@ -1185,155 +1171,6 @@ void timer_loop() {
   appUI->update(dateTime, battery);
 }
 
-// Commander
-String command = "";
-bool commander_inited = false;
-bool commander_dead = false;
-uint16_t commander_blinkTimer = 0;
-std::map<String, int> commander_memory;
-
-void commander_init();
-void commander_loop();
-String commander_runCommand(std::list<String> args);
-
-void commander_init() {
-  commander_inited = false;
-  commander_dead = false;
-  Wire.begin();
-  Wire.setTimeOut(500);
-}
-
-void commander_loop() {
-  if (!commander_inited) {
-    cv_display.clear();
-    cv_display.setCursor(0, 0);
-    cv_display.setTextColor(CYAN, BLACK);
-    cv_display.println("MK75-Commander V1.0");
-    cv_display.setTextColor(YELLOW, BLACK);
-    cv_display.print("> ");
-    commander_inited = true;
-  }
-  if (!commander_dead) {
-    commander_blinkTimer += prevLoopTime;
-    if (commander_blinkTimer > 1000) commander_blinkTimer = 0;
-    Wire.requestFrom(0x5F, 1);
-    if (Wire.available()) {
-      while (Wire.available()) {
-        char c = Wire.read();
-        if (c == 8) {
-          command.remove(command.length()-1);
-          slpTimer = 0;
-        } else if (c == 13) {
-          cv_display.setCursor(0, cv_display.getCursorY());
-          cv_display.setTextColor(YELLOW, BLACK);
-          cv_display.print("> ");
-          cv_display.setTextColor(WHITE, BLACK);
-          cv_display.println(command);
-          std::list<String> parsed = sprit(command, ' ');
-          cv_display.println(commander_runCommand(parsed));
-          command = "";
-          slpTimer = 0;
-        } else if (c != 0) {
-          command += c;
-          slpTimer = 0;
-        }
-      }
-      cv_display.setCursor(0, cv_display.getCursorY());
-      cv_display.setTextColor(YELLOW, BLACK);
-      cv_display.print("> ");
-      cv_display.setTextColor(WHITE, BLACK);
-      cv_display.print(command);
-      cv_display.setTextColor(LIGHTGREY, BLACK);
-      if (commander_blinkTimer > 500) {
-        cv_display.print("_ ");
-      } else {
-        cv_display.print("  ");
-      }
-    } else {
-      commander_dead = true;
-      cv_display.setCursor(0, cv_display.getCursorY());
-      cv_display.println("Error: I2C Device not Found");
-      cv_display.println("Touch to Reload.");
-    }
-  }
-  auto tDetail = M5.Touch.getDetail();
-  if (M5.BtnA.wasClicked()) {
-    appEnd();
-  } else if (tDetail.wasClicked() and commander_dead) {
-    cv_display.println("Reloading...");
-    cv_display.pushSprite(0, 0);
-    Wire.requestFrom(0x5F, 1);
-    if (Wire.available()) {
-      commander_dead = false;
-    } else {
-      cv_display.println("Error: I2C Device not Found");
-      cv_display.println("Touch to Reload.");
-    }
-  }
-  cv_display.pushSprite(0, 0);
-}
-
-double commander_getTerm(String target) {
-  double term;
-  if (isStringDigit(target)) {
-    term = target.toDouble();
-  } else {
-    if (commander_memory.count(target)) {
-      term = commander_memory[target];
-    } else {
-      return INT_MIN;
-    }
-  }
-  return term;
-}
-
-double commander_calc(String type, double a, double b) {
-  if (type == "add") return a+b;
-  else if (type == "sub") return a-b;
-  else if (type == "mul") return a*b;
-  else if (type == "div") return a/b;
-  return 0;
-}
-
-String commander_runCommand(std::list<String> args) {
-  String commandType = *args.begin();
-  if ((commandType == "add") or (commandType == "sub") or (commandType == "mul") or (commandType == "div")) {
-    bool first = true;
-    double result = 0;
-    for (auto i = std::next(args.begin()); i != args.end(); i++) {
-      String termStr = *i;
-      if ((termStr).charAt(0) == '>') {
-        termStr = termStr.substring(1, termStr.length());
-        commander_memory[termStr] = result;
-        return String(result)+" > "+termStr;
-      }
-      double term = commander_getTerm(termStr);
-      if (term == INT_MIN) return "Unknown Memory: "+termStr;
-      if (first) {
-        result = term;
-        first = false;
-      } else {
-        result = commander_calc(commandType, result, term);
-      }
-    }
-    return String(result);
-  }
-  return "Unknown Command";
-}
-
-// Debug Settings
-void settings_init_another() {
-  appStart = millis();
-  M5.Speaker.begin();
-  M5.Speaker.setVolume(127);
-  appUI = new UI;
-  haveToDeleteAppUI = true;
-  appUI->setTitle("Settings");
-  appUI->addItem((String) "beep", beep, (String) "Only Beep");
-  appUI->linkFunctionToBack(appEnd);
-  appUI->makeUI(lang);
-}
-
 void makeClockBase() {
   cv_ckbase.createSprite(220, 220);
   cv_ckbase.fillCircle(ckCenterX, ckCenterY, 110, TFT_WHITE);
@@ -1371,8 +1208,11 @@ void updateClock() {
     cv_clock.fillArc(ckCenterX, ckCenterY, 110, 108, 270, (battery*3.6)-90.5, batcolor(battery));
   }
   cv_ckhhand.setPivot(2, 2);
+  //アンチエイジングを入れても入れなくてもあまり（1フレーム当たり、80~90ms中5ms程度しか）負荷が変わらないことを確認しました
+  //cv_ckhhand.pushRotated(&cv_clock, (180+((dateTime.time.hours*30)+(dateTime.time.minutes/2)))%360);
   cv_ckhhand.pushRotatedWithAA(&cv_clock, (180+((dateTime.time.hours*30)+(dateTime.time.minutes/2)))%360);
   cv_ckmhand.setPivot(1, 1);
+  //cv_ckmhand.pushRotated(&cv_clock, (180+((dateTime.time.minutes*6)+(dateTime.time.seconds/10)))%360);
   cv_ckmhand.pushRotatedWithAA(&cv_clock, (180+((dateTime.time.minutes*6)+(dateTime.time.seconds/10)))%360);
   cv_clock.fillCircle(ckCenterX, ckCenterY, 8, TFT_SKYBLUE);
   cv_clock.fillCircle(ckCenterX, ckCenterY, 5, TFT_BLACK);
@@ -1594,6 +1434,7 @@ void loopMenuTouch() {
     if (M5.Touch.getCount() > 0) {
       m5::Touch_Class::touch_detail_t tDetail = M5.Touch.getDetail();
       if (tDetail.wasPressed()) {
+        touchedOnMenu = appMenu;
         for (int8_t i = 0; i < 4; i++) {
           prevSwipeAcc[i] = 0;
         }
@@ -1605,7 +1446,7 @@ void loopMenuTouch() {
       if (tDetail.base_x >= 220) {
         //screenSwipeVertical = screenSwipeVerticalFirst - tDetail.distanceY();
         scrollsWhenTouch(tDetail, &screenSwipeVertical, true);
-        if (tDetail.wasClicked() and !tDetail.isDragging() and !tDetail.isFlicking()) {
+        if (tDetail.wasClicked() and !tDetail.isDragging() and !tDetail.isFlicking() and touchedOnMenu) {
           for (int8_t i = 0; i < 6; i++) {
             if (inLimit(tDetail.x, 225, 315) and inLimit(tDetail.y, (i*120)+75-screenSwipeVertical, (i*120)+165-screenSwipeVertical)) {
               if (i == 0) {
@@ -1714,8 +1555,6 @@ void loop() {
     stopwatch_loop();
   } else if (nowApp == "timer") {
     timer_loop();
-  } else if (nowApp == "commander") {
-    commander_loop();
   } else {
     // アプリサイドバーの開閉
     loopMenuTouch();
