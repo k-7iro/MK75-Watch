@@ -1,0 +1,454 @@
+{
+  "timetable": {
+    "Sample Station": {
+      "weekdays": {
+        "6": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "7": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "8": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "9": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "10": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "11": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "12": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "13": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "14": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "15": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "16": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "17": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "18": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "19": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "20": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "21": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "22": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "23": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ]
+      },
+      "weekends": {
+        "6": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "7": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "8": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "9": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "10": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "11": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "12": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "13": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "14": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "15": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "16": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "17": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "18": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "19": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "20": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "21": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "22": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ],
+        "23": [
+          {
+            "m": 0,
+            "t": "Local",
+            "d": "Tokyo"
+          },
+          {
+            "m": 30,
+            "t": "Express",
+            "d": "Tokyo"
+          }
+        ]
+      }
+    }
+  },
+  "color": {
+    "Local": [
+      255,
+      255,
+      255
+    ],
+    "Express": [
+      255,
+      0,
+      0
+    ]
+  }
+}

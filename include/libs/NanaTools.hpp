@@ -1,5 +1,6 @@
 /*
   [ NanaTools ] by K-Nana
+  MIT License https://opensource.org/license/mit
 */
 
 #pragma once
