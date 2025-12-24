@@ -70,9 +70,10 @@ const int32_t ckCenterX = 110;
 const int32_t ckCenterY = 110;
 const int32_t JST = 32400;
 const String week[7] = {"Sun", "Mon", "Tue", "Wed", "Thr", "Fri", "Sat"};
-const String apps[6] = {"timer", "settings", "alarm", "commander", "stopwatch", "train"};
-const String appsEn[6] = {"Timer", "Settings", "Alarm", "?", "Stopwatch", "Train"};
-const String appsJa[6] = {"タイマー", "設定", "アラーム", "?", "ストップWt", "時刻表"};
+const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "external", "settings"};
+const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
+const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
+const uint8_t howManyApps = 7;
 String M5Model;
 
 int32_t slpTimer = 10000;
@@ -1382,16 +1383,16 @@ void setupSprites() {
 void drawMenu() {
   cv_menu.clear();
   cv_menu.setFont(&lgfxJapanMincho_40);
-  for (int8_t i = 0; i < 6; i++) {
+  for (int8_t i = 0; i < howManyApps; i++) {
     if (inLimit(i*120, screenSwipeVertical-220, screenSwipeVertical+220)) {
       // パフォーマンス重視ならfillRoundRectではなくfillRectを使うべきかもしれない
       cv_menu.fillRoundRect(105-screenSwipe, (i*120)+75-screenSwipeVertical, 90, 90, 5, WHITE);
       cv_menu.fillRoundRect(110-screenSwipe, (i*120)+80-screenSwipeVertical, 80, 80, 4, BLACK);
-      cv_menu.pushImage(134-screenSwipe, (i*120)+104-screenSwipeVertical, 32, 32, icons[i]);
+      cv_menu.pushImage(110-screenSwipe, (i*120)+80-screenSwipeVertical, 80, 80, icons[i]);
       if (lang == "ja") {
-        cv_menu.drawCenterString(appsJa[i], 150-screenSwipe, (i*120)+140-screenSwipeVertical, &fonts::efontJA_16);
+        cv_menu.drawCenterString(appsJa[i], 150-screenSwipe, (i*120)+170-screenSwipeVertical, &fonts::efontJA_16);
       } else if (lang == "en") {
-        cv_menu.drawCenterString(appsEn[i], 150-screenSwipe, (i*120)+140-screenSwipeVertical, &fonts::Font2);
+        cv_menu.drawCenterString(appsEn[i], 150-screenSwipe, (i*120)+170-screenSwipeVertical, &fonts::Font2);
       } else {
         //cv_menu.drawCenterString("ERROR. LOL", (ix*105)+(sizeX/2), ((iy*85)-45)+(sizeY/2), &fonts::Font2);
       }
@@ -1447,33 +1448,37 @@ void loopMenuTouch() {
         //screenSwipeVertical = screenSwipeVerticalFirst - tDetail.distanceY();
         scrollsWhenTouch(tDetail, &screenSwipeVertical, true);
         if (tDetail.wasClicked() and !tDetail.isDragging() and !tDetail.isFlicking() and touchedOnMenu) {
-          for (int8_t i = 0; i < 6; i++) {
+          for (int8_t i = 0; i < howManyApps; i++) {
             if (inLimit(tDetail.x, 225, 315) and inLimit(tDetail.y, (i*120)+75-screenSwipeVertical, (i*120)+165-screenSwipeVertical)) {
+              vibTimer = 200;
               if (i == 0) {
                 nowApp = "timer";
                 timer_init();
               } else if (i == 1) {
-                nowApp = "settings";
-                settings_init();
-              } else if (i == 2) {
                 nowApp = "alarm";
                 alarm_init();
-              } else if (i == 3) {
-                //nowApp = "timer";
-                //timer_init();
-              } else if (i == 4) {
+              } else if (i == 2) {
                 nowApp = "stopwatch";
                 stopwatch_init();
-              } else if (i == 5) {
+              } else if (i == 3) {
                 nowApp = "train";
                 train_init();
+              } else if (i == 4) {
+                //nowApp = "random";
+                //random_init();
+              } else if (i == 5) {
+                //nowApp = "external";
+                //external_init();
+              } else if (i == 6) {
+                nowApp = "settings";
+                settings_init();
               }
             }
           } 
         }
       }
     } else {
-      scrollsWhenNotTouch(&screenSwipeVertical, 6, 120, false);
+      scrollsWhenNotTouch(&screenSwipeVertical, howManyApps, 120, false);
     }
   }
 }
