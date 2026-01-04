@@ -31,7 +31,7 @@ String forceDigits(int num, int digits) {
   return result;
 }
 
-std::list<String> sprit(String sentence, char denim) {
+std::list<String> split(String sentence, char denim) {
   std::list<String> result;
   while (true) {
     int find = sentence.indexOf(denim);
@@ -58,4 +58,9 @@ bool isStringDigit(String target) {
     cnt++;
   }
   return (!target.isEmpty());
+}
+
+String successOrFail(bool target) {
+  if (target) return "Success";
+  return "Failed";
 }

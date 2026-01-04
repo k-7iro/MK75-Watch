@@ -21,6 +21,7 @@
 #include <map>
 #include "assets/images.hpp"
 #include "assets/sounds.hpp"
+#include "assets/htmls.hpp"
 #include "libs/NanaUI.hpp"
 #include "libs/NanaTools.hpp"
 #include "new"
@@ -53,7 +54,9 @@ JsonDocument wifiJson;
 JsonDocument trainJson;
 JsonDocument alarmJson;
 JsonDocument spDatesJson;
-std::list<long> timers;
+std::list<long> timers; // WHY IT'S LIST!? It should be array.
+WiFiServer server(80);
+String header;
 
 const String lang = "ja";
 String nowApp = "";
@@ -68,12 +71,15 @@ const int32_t sizeY = 240;
 const int32_t centerY = sizeY/2;
 const int32_t ckCenterX = 110;
 const int32_t ckCenterY = 110;
-const int32_t JST = 32400;
 const String week[7] = {"Sun", "Mon", "Tue", "Wed", "Thr", "Fri", "Sat"};
 const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "external", "settings"};
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
+const int32_t version = 2601001;
+const uint8_t timeSyncHour = 4;
+const IPAddress ip(192, 168, 10, 75);
+const IPAddress subnet(255, 255, 255, 0);
 String M5Model;
 
 int32_t slpTimer = 10000;
@@ -94,6 +100,7 @@ uint8_t lastAlarmMin = 60;
 uint16_t lastSync = 0;
 int32_t birthChangeTimer = 0;
 uint8_t birthChangeID = 0;
+uint8_t timeSyncMinute = 60;
 
 float mpu[3] = {0, 0, 0};
 float prevGyro[5] = {0, 0, 0, 0, 0};
@@ -140,25 +147,25 @@ uint32_t batcolor(int32_t bat) {
 
 String getModel() {
   switch (M5.getBoard()) {
-    case m5::board_t::board_M5StackCoreS3: return "M5StackS3";
-    case m5::board_t::board_M5AtomS3Lite: return "M5ATOMS3Lite";
-    case m5::board_t::board_M5AtomS3: return "M5ATOMS3";
-    case m5::board_t::board_M5StampC3: return "M5StampC3";
-    case m5::board_t::board_M5StampC3U: return "M5StampC3U";
-    case m5::board_t::board_M5Stack: return "M5Stack";
-    case m5::board_t::board_M5StackCore2: return "M5StackCore2";
-    case m5::board_t::board_M5StickC: return "M5StickC";
-    case m5::board_t::board_M5StickCPlus: return "M5StickCPlus";
-    case m5::board_t::board_M5StackCoreInk: return "M5CoreInk";
-    case m5::board_t::board_M5Paper: return "M5Paper";
-    case m5::board_t::board_M5Tough: return "M5Tough";
-    case m5::board_t::board_M5Station: return "M5Station";
-    case m5::board_t::board_M5AtomMatrix: return "M5ATOM Matrix";
-    case m5::board_t::board_M5AtomLite: return "M5ATOM Lite";
-    case m5::board_t::board_M5AtomPsram: return "M5ATOM PSRAM";
-    case m5::board_t::board_M5AtomU: return "M5ATOM U";
+    case m5::board_t::board_M5StackCoreS3: return "CoreS3";
+    case m5::board_t::board_M5AtomS3Lite: return "ATOMS3 Lite";
+    case m5::board_t::board_M5AtomS3: return "ATOMS3";
+    case m5::board_t::board_M5StampC3: return "StampC3";
+    case m5::board_t::board_M5StampC3U: return "StampC3U";
+    case m5::board_t::board_M5Stack: return "Basic";
+    case m5::board_t::board_M5StackCore2: return "Core2";
+    case m5::board_t::board_M5StickC: return "StickC";
+    case m5::board_t::board_M5StickCPlus: return "StickCPlus";
+    case m5::board_t::board_M5StackCoreInk: return "CoreInk";
+    case m5::board_t::board_M5Paper: return "Paper";
+    case m5::board_t::board_M5Tough: return "Tough";
+    case m5::board_t::board_M5Station: return "Station";
+    case m5::board_t::board_M5AtomMatrix: return "ATOM Matrix";
+    case m5::board_t::board_M5AtomLite: return "ATOM Lite";
+    case m5::board_t::board_M5AtomPsram: return "ATOM PSRAM";
+    case m5::board_t::board_M5AtomU: return "ATOM U";
     case m5::board_t::board_M5TimerCam: return "TimerCamera";
-    case m5::board_t::board_M5StampPico: return "M5StampPico";
+    case m5::board_t::board_M5StampPico: return "StampPico";
     default: return "Unknown";
   }
 }
@@ -217,33 +224,33 @@ int monthLastDay(int month, int year) {
   return 31;
 }
 
-String readSPIJson(String filename, JsonDocument *target, int32_t timeout) {
+bool readSPIJson(String filename, JsonDocument *target, int32_t timeout) { // エラーコードを返す
   JsonDocument temp;
   File file = SPIFFS.open(filename, FILE_READ);
   if (file) {
     DeserializationError error = deserializeJson(temp, file);
     file.close();
     if (error) {
-      return "JSON Error";
+      return false;
     }
     *target = temp;
-    return "";
+    return true;
   }
   file.close();
-  return "Config file isn't found";
+  return false;
 }
 
-String writeSPIJson(String filename, JsonDocument *target) {
+bool writeSPIJson(String filename, JsonDocument *target) {
   JsonDocument temp = *target;
   if (SPIFFS.exists(filename)) {SPIFFS.remove(filename);}
   File file = SPIFFS.open(filename, FILE_WRITE);
   if (file) {
     serializeJson(temp, file);
     file.close();
-    return "";
+    return true;
   }
   file.close();
-  return "Can't open file";
+  return false;
 }
 
 bool checkGyro() {
@@ -325,11 +332,14 @@ String connectHTTP(String url) {
 void syncTime() {
   long tmrStart = millis();
   configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
-  while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED) {
+  Serial.println("Synctime 1");
+  while (!(sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED or (millis()-tmrStart) > 10000)) {
     delay(1000);
   }
+  Serial.println("Synctime 2");
   time_t t = time(nullptr)+1; // Advance one second.
-  while (t > time(nullptr));  /// Synchronization in seconds
+  while (t > time(nullptr));  // Synchronization in seconds
+  Serial.println("Synctime 3");
   M5.Rtc.setDateTime(localtime(&t));
   Serial.println("OK!");
 }
@@ -480,22 +490,26 @@ void lowPowSleep() {
   while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
     dateTime = M5.Rtc.getDateTime();
     if (checkAlarm() || checkTimer()) break;
-    if (lastSync != dateTime.date.date+(dateTime.date.month*32)) {
-      M5.Power.setLed(255);
-      long wifiTimer = millis();
-      String SSID = connectWiFi(wifiJson);
-      if (SSID != "") {
-        while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
-          delay(1000);
+    if (dateTime.time.hours == timeSyncHour and lastSync != dateTime.date.date+(dateTime.date.month*32)) {
+      if (timeSyncMinute == 60) timeSyncMinute = random(60);
+      if (dateTime.time.minutes == timeSyncMinute) {
+        timeSyncMinute = 60;
+        M5.Power.setLed(255);
+        long wifiTimer = millis();
+        String SSID = connectWiFi(wifiJson);
+        if (SSID != "") {
+          while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
+            delay(1000);
+          }
         }
+        if (WiFi.status() == WL_CONNECTED) {
+          syncTime();
+        }
+        dateTime = M5.Rtc.getDateTime();
+        lastSync = dateTime.date.date+(dateTime.date.month<<5);
+        WiFi.disconnect(true);
+        M5.Power.setLed(0);
       }
-      if (WiFi.status() == WL_CONNECTED) {
-        syncTime();
-      }
-      dateTime = M5.Rtc.getDateTime();
-      lastSync = dateTime.date.date+(dateTime.date.month<<5);
-      WiFi.disconnect(true);
-      M5.Power.setLed(0);
     }
     M5.Power.lightSleep(10000000);
     M5.update();
@@ -579,6 +593,10 @@ void beep() {
 // Settings
 void powerOff() { M5.Power.powerOff(); }
 
+void resetWiFi() {
+  SPIFFS.remove("/wifi.json");
+}
+
 void settings_init() {
   appStart = millis();
   M5.Speaker.begin();
@@ -589,6 +607,7 @@ void settings_init() {
   appUI->addItem((String) "lpsleep", callLowPowSleep, (String) "Low Power Sleep");
   appUI->addItem((String) "shutdown", powerOff, (String) "Shutdown");
   appUI->addItem((String) "synctime", syncTimeOnSettings, (String) "Sync Time");
+  appUI->addItem((String) "resetwifi", resetWiFi, (String) "Reset Wi-Fi");
   appUI->linkFunctionToBack(appEnd);
   appUI->makeUI(lang);
 }
@@ -1297,11 +1316,12 @@ bool copySDtoSPI() {
 }
 
 void setupConfigs() {
-  SPIFFS.begin(true);
-  M5Model = getModel();
+  M5.Display.setTextColor(SKYBLUE, TFT_BLACK);
   M5.Display.println("MK75-Watch");
+  M5.Display.setTextColor(WHITE, TFT_BLACK);
+  M5Model = getModel();
   M5.Display.print("Model: ");
-  if (M5Model == "M5StackCore2") {
+  if (M5Model == "Core2") {
     M5.Display.setTextColor(GREEN, TFT_BLACK);
     M5.Display.println(M5Model);
     M5.Display.println("Supported Model");
@@ -1311,64 +1331,135 @@ void setupConfigs() {
     M5.Display.println("Unsupported Model");
   }
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-  M5.Display.print("copy sd to spiffs...");
-  if (copySDtoSPI()) {
-    M5.Display.println("success");
-  } else {
-    M5.Display.println("failed");
+  if (!SPIFFS.begin()) {
+    M5.Display.print("Formatting SPIFFS (It takes long time) ...");
+    SPIFFS.format();
+    M5.Display.println("Success");
   }
+  M5.Display.print("Copying SD Card's contents to SPIFFS...");
+  M5.Display.println(successOrFail(copySDtoSPI()));
   M5.Display.print("Loading wifi json...");
-  String SPIResult = readSPIJson("/wifi.json", &wifiJson, 1000);
-  M5.Display.println("finish");
-  /*
-  long wifiTimer = 0;
-  if (SPIResult == "") {
-    if (WiFi.status() != WL_CONNECTED) {
-      M5.Display.print("wifi from json connect...");
-      String SSID = connectWiFi(wifiJson);
-      if (SSID != "") {
-        M5.Display.println(SSID+" success");
-        wifiTimer = millis();
-      } else {
-        M5.Display.println("failed");
+  bool wifiJsonAvailable = readSPIJson("/wifi.json", &wifiJson, 10000);
+  M5.Display.println(successOrFail(wifiJsonAvailable));
+  if (wifiJsonAvailable) {
+    M5.Display.print("Loading train json...");
+    M5.Display.println(successOrFail(readSPIJson("/train.json", &trainJson, 10000)));
+    M5.Display.print("Loading alarm json...");
+    M5.Display.println(successOrFail(readSPIJson("/alarm.json", &alarmJson, 10000)));
+    M5.Display.print("Loading special dates json...");
+    M5.Display.println(successOrFail(readSPIJson("/special_dates.json", &spDatesJson, 10000)));
+    delay(1000);
+    M5.Display.clear();
+  } else {
+    delay(1000);
+    bool notConnected = true;
+    String trySSID = "";
+    String tryPass = "";
+    while (notConnected) {
+      M5.Display.clear();
+      M5.Display.setCursor(0, 0);
+      M5.Display.setFont(&fonts::Font4);
+      M5.Display.setTextColor(SKYBLUE, TFT_BLACK);
+      M5.Display.println("Wi-Fi Setup");
+      M5.Display.setFont(&fonts::Font2);
+      if (!trySSID.isEmpty()) {
+        M5.Display.setTextColor(RED, TFT_BLACK);
+        M5.Display.println("Failed to Connect "+trySSID+".");
       }
+      M5.Display.setTextColor(WHITE, TFT_BLACK);
+      M5.Display.println("1. Connect to Wi-Fi \"MK75-Setup\" using your smartphone or computer.");
+      M5.Display.println("2. Scan the QR code or access the URL.");
+      M5.Display.println("3. Follow the on-screen instructions.");
+      String SSIDs = "";
+      int32_t n = WiFi.scanNetworks();
+      for (int32_t i = 0; i < n; i++) {
+        SSIDs += "<option>";
+        SSIDs += WiFi.SSID(i);
+        SSIDs += "</option>";
+      }
+      WiFi.softAP("MK75-Setup");
+      delay(100);
+      WiFi.softAPConfig(ip, ip, subnet);
+      IPAddress myIP = WiFi.softAPIP();
+      server.begin();
+      M5.Display.setTextColor(YELLOW, TFT_BLACK);
+      M5.Display.println("http://192.168.10.75/wifi-setup/");
+      M5.Display.qrcode("http://192.168.10.75/wifi-setup/", 0, sizeY-100, 100, 2);
+      bool notSSIDReady = true;
+      while (notSSIDReady) {
+        WiFiClient client = server.available();
+        if (client) {
+          client.setTimeout(1000);
+          String request = client.readStringUntil('\n');
+          Serial.println(request);
+          while (client.available()) client.read();
+          if (request.endsWith("\r")) request = request.substring(0, request.length()-1);
+          std::list<String> reqSplit = split(request, ' ');
+          std::list<String>::iterator reqSplitItr = reqSplit.begin();
+          if (*reqSplitItr == "GET") {
+            reqSplitItr++;
+            std::list<String> dirSplit = split(*reqSplitItr, '/');
+            std::list<String>::iterator dirSplitItr = dirSplit.begin();
+            uint32_t dirSplitLength = dirSplit.size();
+            Serial.println(*dirSplitItr);
+            Serial.println(dirSplitLength);
+            if (dirSplitLength == 0) {
+              client.print(Error404);
+            } else if (*dirSplitItr == "wifi-setup") {
+              if (dirSplitLength == 1) {
+                client.print(WiFiSetForm(false, SSIDs));
+              } else {
+                dirSplitItr++;
+                client.print(WiFiSetForm(true, ""));
+                notSSIDReady = false;
+                trySSID = *dirSplitItr;
+                if (dirSplitLength != 2) {
+                  dirSplitItr++;
+                  tryPass = *dirSplitItr;
+                }
+              }
+            } else {
+              client.print(Error404);
+            }
+          }
+          client.stop();
+          long disconWaitTimer = millis();
+          while ((client.connected() and (millis()-disconWaitTimer) <= 10000)) {
+            delay(100);
+          }
+          if (client.connected()) continue;
+        }
+      }
+      server.end();
+      WiFi.disconnect(false);
+      delay(100);
+      M5.Display.clear();
+      M5.Display.setCursor(0, 0);
+      M5.Display.setFont(&fonts::Font4);
+      M5.Display.setTextColor(SKYBLUE, TFT_BLACK);
+      M5.Display.println("Wi-Fi Setup");
+      M5.Display.setFont(&fonts::Font2);
+      M5.Display.setTextColor(WHITE, TFT_BLACK);
+      M5.Display.println("Connecting "+trySSID+"...");
+      long wifiTimer = millis();
+      WiFi.begin(trySSID, tryPass);
+      while (!(WiFi.status() == WL_CONNECTED or (millis()-wifiTimer) > 10000)) {
+        delay(1000);
+        Serial.print(".");
+      }
+      if (WiFi.status() == WL_CONNECTED) notConnected = false;
     }
-  } else {
-    M5.Display.println("error ["+SPIResult+"]");
+    M5.Display.println("Successed. Saving Wi-Fi Settings...");
+    wifiJson.clear();
+    wifiJson[trySSID] = tryPass;
+    writeSPIJson("/wifi.json", &wifiJson);
+    M5.Display.println("Finished. Syncing time...");
+    Serial.println(WiFi.status());
+    syncTime();
+    M5.Display.println("Finished.");
+    WiFi.disconnect(true);
+    delay(1000);
   }
-  */
-  M5.Display.print("Loading train json...");
-  readSPIJson("/train.json", &trainJson, 100000);
-  M5.Display.println("finish");
-  M5.Display.print("Loading alarm json...");
-  readSPIJson("/alarm.json", &alarmJson, 100000);
-  M5.Display.println("finish");
-  M5.Display.print("Loading special dates json...");
-  readSPIJson("/special_dates.json", &spDatesJson, 100000);
-  M5.Display.println("finish");
-  /*
-  if (wifiTimer != 0) {
-    while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
-      delay(1000);
-    }
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    M5.Display.print("change time...");
-    String error = syncTime();
-    if (error == "") {
-      M5.Display.println("success");
-    } else {
-      M5.Display.println("failed ["+error+"]");
-    }
-  } else {
-    M5.Display.println("can't set time");
-  }
-  WiFi.disconnect(true);
-  */
-  dateTime = M5.Rtc.getDateTime();
-  lastSync = dateTime.date.date+(dateTime.date.month<<5);
-  delay(1000);
-  M5.Display.clear();
 }
 
 void setupSprites() {
@@ -1515,6 +1606,7 @@ void setup() {
   M5.begin(cfg);
   M5.Power.begin();
   M5.Imu.begin();
+  M5.Rtc.begin();
   Serial.begin(115200);
   M5.Display.init();
   M5.Display.setBrightness(63);

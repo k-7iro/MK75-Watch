@@ -1,3 +1,7 @@
+/*
+    [ MK75-Watch Sounds ] by K-Nana
+*/
+
 #pragma once
 #include <pgmspace.h>
 #include <stdint.h>
