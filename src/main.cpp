@@ -1576,7 +1576,7 @@ void loopMenuTouch() {
 }
 
 void loopTimeSel() {
-  cv_timesel.pushSprite(centerX-150, centerY-60);
+  cv_timesel.pushSprite(centerX-150, centerY-55);
   if (M5.Touch.getCount() > 0) {
     m5::Touch_Class::touch_detail_t tDetail = M5.Touch.getDetail();
     if (tDetail.wasPressed() || tDetail.isHolding()) {

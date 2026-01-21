@@ -91,7 +91,7 @@ void UI::makeUI(String lang) {
   if ((items.size()*rowSize)+rowSize > height) {
     UIHeight = (items.size()*rowSize);
   } else {
-    UIHeight = height-48;
+    UIHeight = height-64;
   }
   disp.createSprite(width, height);
   disp.fillScreen(TFT_BLACK);
@@ -101,19 +101,23 @@ void UI::makeUI(String lang) {
   } else {
     canv.fillScreen(TFT_BLACK);
   }
-  top.createSprite(width, 48);
+  top.createSprite(width, 64);
   top_dtime_bat.createSprite(width, 17);
   top.fillRect(0, 0, width, rowSize, WHITE);
   top.setTextColor(BLACK, WHITE);
   if (titleLocale.count(lang) > 0) {
-    if (localeFont[lang] == 1) top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::efontJA_24);
-    else if (localeFont[lang] == 2) top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::efontCN_24);
-    else top.drawCenterString(titleLocale[lang], width/2, 18, &fonts::Font4);
+    if (localeFont[lang] == 1) top.drawCenterString(titleLocale[lang], width/2, 26, &fonts::efontJA_24);
+    else if (localeFont[lang] == 2) top.drawCenterString(titleLocale[lang], width/2, 26, &fonts::efontCN_24);
+    else top.drawCenterString(titleLocale[lang], width/2, 26, &fonts::Font4);
   } else {
-    if (localeFont["en"] == 1) top.drawCenterString(titleLocale["en"], width/2, 18, &fonts::efontJA_24);
-    else if (localeFont["en"] == 2) top.drawCenterString(titleLocale["en"], width/2, 18, &fonts::efontCN_24);
-    else top.drawCenterString(titleLocale["en"], width/2, 18, &fonts::Font4);
+    if (localeFont["en"] == 1) top.drawCenterString(titleLocale["en"], width/2, 26, &fonts::efontJA_24);
+    else if (localeFont["en"] == 2) top.drawCenterString(titleLocale["en"], width/2, 26, &fonts::efontCN_24);
+    else top.drawCenterString(titleLocale["en"], width/2, 26, &fonts::Font4);
   }
+  uint16_t lightRed = M5.Display.color565(0xff, 0xaa, 0xaa);
+  top.fillRect(0, 0, 54, rowSize, lightRed);
+  top.setTextColor(BLACK, lightRed);
+  top.drawString("<", 20, 26, &fonts::Font4);
   uint8_t cnt = 0;
   for(auto i = items.begin(); i != items.end(); i++ ) {
     canv.setTextColor(itemColor[*i], BLACK);
@@ -183,13 +187,19 @@ void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery) {
     scrollAccel[0] = floor(scrollAccel[0]*0.8);
     scroll += scrollAccel[0];
     if (prevX != -1) {
-      int touched = floor((prevY+scroll)/rowSize)-1;
-      if (scrollCount == 0 && items.size() > touched && touched >= 0) {
-        String touchedID = *std::next(items.begin(), touched);
-        if (itemUseArgFunction[touchedID]) {
-          itemArgFunction[touchedID](touchedID);
-        } else {
-          itemFunction[touchedID]();
+      if (64 >= prevY && prevY > 16) {
+        if (prevX <= 34) {
+          backFunction();
+        }
+      } else {
+        int touched = floor((prevY+scroll)/rowSize)-1;
+        if (scrollCount == 0 && items.size() > touched && touched >= 0) {
+          String touchedID = *std::next(items.begin(), touched);
+          if (itemUseArgFunction[touchedID]) {
+            itemArgFunction[touchedID](touchedID);
+          } else {
+            itemFunction[touchedID]();
+          }
         }
       }
     }
