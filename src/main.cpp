@@ -1015,22 +1015,23 @@ void train_loop() {
         timetable = trainJson["timetable"][timetableName]["weekdays"];
       }
       String StrJson = timetable[5];
-      for ( const auto loopTimetable : timetable[String(dateTime.time.hours)].as<JsonArray>() ) {
-        if (loopTimetable["m"] > dateTime.time.minutes) {
+      for ( const JsonObject loopTimetable : timetable[String(dateTime.time.hours)].as<JsonArray>() ) {
+        uint8_t timetableMin = loopTimetable["m"].as<JsonObject>();
+        if (timetableMin > dateTime.time.minutes) {
           String dest_buffer = loopTimetable["d"];
           String type_buffer = loopTimetable["t"];
-          if (loopTimetable["m"] < min[0]) {
-            min[0] = loopTimetable["m"];
+          if (timetableMin < min[0]) {
+            min[0] = timetableMin;
             dest[0] = dest_buffer;
             type[0] = type_buffer;
             hourAdd[0] = 0;
-          } else if (loopTimetable["m"] < min[1]) {
-            min[1] = loopTimetable["m"];
+          } else if (timetableMin < min[1]) {
+            min[1] = timetableMin;
             dest[1] = dest_buffer;
             type[1] = type_buffer;
             hourAdd[1] = 0;
-          } else if (loopTimetable["m"] < min[2]) {
-            min[2] = loopTimetable["m"];
+          } else if (timetableMin < min[2]) {
+            min[2] = timetableMin;
             dest[2] = dest_buffer;
             type[2] = type_buffer;
             hourAdd[2] = 0;
@@ -1040,21 +1041,22 @@ void train_loop() {
       int32_t loopHourAdd = 0;
       while (min[2] == 60) {
         loopHourAdd = (loopHourAdd+1)%24;
-        for ( const auto loopTimetable : timetable[String(dateTime.time.hours+loopHourAdd)].as<JsonArray>() ) {
+        for ( const JsonObject loopTimetable : timetable[String(dateTime.time.hours+loopHourAdd)].as<JsonArray>() ) {
+          uint8_t timetableMin = loopTimetable["m"].as<JsonObject>();
           String dest_buffer = loopTimetable["d"];
           String type_buffer = loopTimetable["t"];
-          if (loopTimetable["m"] < min[0] && (hourAdd[0] == -1 || hourAdd[0] == loopHourAdd)) {
-            min[0] = loopTimetable["m"];
+          if (timetableMin < min[0] && (hourAdd[0] == -1 || hourAdd[0] == loopHourAdd)) {
+            min[0] = timetableMin;
             dest[0] = dest_buffer;
             type[0] = type_buffer;
             hourAdd[0] = loopHourAdd;
-          } else if (loopTimetable["m"] < min[1] && (hourAdd[1] == -1 || hourAdd[1] == loopHourAdd)) {
-            min[1] = loopTimetable["m"];
+          } else if (timetableMin < min[1] && (hourAdd[1] == -1 || hourAdd[1] == loopHourAdd)) {
+            min[1] = timetableMin;
             dest[1] = dest_buffer;
             type[1] = type_buffer;
             hourAdd[1] = loopHourAdd;
-          } else if (loopTimetable["m"] < min[2] && (hourAdd[2] == -1 || hourAdd[2] == loopHourAdd)) {
-            min[2] = loopTimetable["m"];
+          } else if (timetableMin < min[2] && (hourAdd[2] == -1 || hourAdd[2] == loopHourAdd)) {
+            min[2] = timetableMin;
             dest[2] = dest_buffer;
             type[2] = type_buffer;
             hourAdd[2] = loopHourAdd;
