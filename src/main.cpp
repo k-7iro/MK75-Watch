@@ -24,6 +24,7 @@
 #include "assets/htmls.hpp"
 #include "libs/NanaUI.hpp"
 #include "libs/NanaTools.hpp"
+#include "libs/NanaDrawPlus.hpp"
 #include "new"
 
 #define NTP_TIMEZONE "JST-9" //今後設定で変更可能にする
@@ -1193,19 +1194,19 @@ void timer_loop() {
 
 void makeClockBase() {
   cv_ckbase.createSprite(220, 220);
-  cv_ckbase.fillCircle(ckCenterX, ckCenterY, 110, TFT_WHITE);
-  cv_ckbase.fillCircle(ckCenterX, ckCenterY, 105, TFT_BLACK);
+  drawCircleWithAA(&cv_ckbase, ckCenterX, ckCenterY, 110, TFT_WHITE, TFT_BLACK);
+  drawCircleWithAA(&cv_ckbase, ckCenterX, ckCenterY, 105, TFT_BLACK, TFT_WHITE);
   float deg;
   for (int8_t i = 0; i < 12; i++) {
     deg = i*0.523;
     if (i == 6) {
-      cv_ckbase.setCursor((sin(deg)*93)+ckCenterX-14, (cos(deg)*93)+ckCenterY-13);
+      cv_ckbase.setCursor((sin(deg)*90)+ckCenterX-14, (cos(deg)*90)+ckCenterY-13);
       cv_ckbase.setFont(&fonts::Font4);
       cv_ckbase.setTextColor(TFT_WHITE, TFT_BLACK);
       cv_ckbase.setTextSize(1);
       cv_ckbase.print("12");
     } else if (i % 3 == 0) {
-      cv_ckbase.setCursor((sin(deg)*93)+ckCenterX-7, (cos(deg)*93)+ckCenterY-13);
+      cv_ckbase.setCursor((sin(deg)*90)+ckCenterX-7, (cos(deg)*90)+ckCenterY-13);
       cv_ckbase.setFont(&fonts::Font4);
       cv_ckbase.setTextColor(TFT_WHITE, TFT_BLACK);
       cv_ckbase.setTextSize(1);
@@ -1223,9 +1224,9 @@ void makeClockBase() {
 void updateClock() {
   cv_ckbase.pushSprite(&cv_clock, 0, 0);
   if (M5.Power.Axp2101.isVBUS()) {
-    cv_clock.fillArc(ckCenterX, ckCenterY, 110, 108, 270, (battery*3.6)-90.5, CYAN);
+    cv_clock.fillArc(ckCenterX, ckCenterY, 109, 108, 270, (battery*3.6)-90.5, CYAN);
   } else {
-    cv_clock.fillArc(ckCenterX, ckCenterY, 110, 108, 270, (battery*3.6)-90.5, batcolor(battery));
+    cv_clock.fillArc(ckCenterX, ckCenterY, 109, 108, 270, (battery*3.6)-90.5, batcolor(battery));
   }
   cv_ckhhand.setPivot(2, 2);
   //アンチエイジングを入れても入れなくてもあまり（1フレーム当たり、80~90ms中5ms程度しか）負荷が変わらないことを確認しました
