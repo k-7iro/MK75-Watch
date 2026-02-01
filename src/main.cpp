@@ -1,6 +1,6 @@
 /*
   [ MK75-Watch Ver.2β ] by K-Nana
-  Smartwatch Firmware for M5Stack Core2.
+  Smartwatch Firmware for M5Stack Core2 / CoreS3.
   MIT License https://opensource.org/license/mit
 
   < WARNING: Beta version >
@@ -102,6 +102,7 @@ uint16_t lastSync = 0;
 int32_t birthChangeTimer = 0;
 uint8_t birthChangeID = 0;
 uint8_t timeSyncMinute = 60;
+uint8_t modelType = 0; // 2 for Core2, 10 for CoreS3
 
 float mpu[3] = {0, 0, 0};
 float prevGyro[5] = {0, 0, 0, 0, 0};
@@ -147,8 +148,10 @@ uint32_t batcolor(int32_t bat) {
 }
 
 String getModel() {
-  switch (M5.getBoard()) {
+  modelType = M5.getBoard();
+  switch (modelType) {
     case m5::board_t::board_M5StackCoreS3: return "CoreS3";
+    case m5::board_t::board_M5StackCoreS3SE: return "CoreS3-SE";
     case m5::board_t::board_M5AtomS3Lite: return "ATOMS3 Lite";
     case m5::board_t::board_M5AtomS3: return "ATOMS3";
     case m5::board_t::board_M5StampC3: return "StampC3";
@@ -592,7 +595,11 @@ void lowPowSleep() {
         M5.Power.setLed(0);
       }
     }
-    M5.Power.lightSleep(10000000);
+    if (modelType == 10) {
+      esp_sleep_enable_ext0_wakeup(GPIO_NUM_21, false);
+      esp_sleep_enable_timer_wakeup(10000000);
+      esp_light_sleep_start();
+    } else M5.Power.lightSleep(10000000);
     M5.update();
     touch = M5.Touch.getCount();
   }
@@ -620,7 +627,11 @@ void activeSleep() {
   M5.Display.sleep();
   M5.Power.setExtOutput(false);
   while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
-    M5.Power.lightSleep(100000);
+    if (modelType == 10) {
+      esp_sleep_enable_ext0_wakeup(GPIO_NUM_21, false);
+      esp_sleep_enable_timer_wakeup(100000);
+      esp_light_sleep_start();
+    } else M5.Power.lightSleep(100000);
     M5.update();
     if ((!charged) and (checkGyro())) break;
     if (alarmTimer == 100) {
@@ -1517,7 +1528,7 @@ void setupConfigs() {
   M5.Display.setTextColor(WHITE, TFT_BLACK);
   M5Model = getModel();
   M5.Display.print("Model: ");
-  if (M5Model == "Core2") {
+  if (modelType == 2 || modelType == 10) {
     M5.Display.setTextColor(GREEN, TFT_BLACK);
     M5.Display.println(M5Model);
     M5.Display.println("Supported Model");
