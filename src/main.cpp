@@ -113,6 +113,7 @@ bool afterSlp = false;
 bool haveToDeleteAppUI = false;
 bool appMenu = false;
 bool touchedOnMenu = false;
+bool autoShutdown = true; // 設定可能WIP
 
 uint8_t battery = M5.Power.getBatteryLevel();
 m5::rtc_datetime_t dateTime;
@@ -563,6 +564,23 @@ void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, bool
   prevTY = -1;
 }
 
+void connectWiFiAndTimeSync() {
+  M5.Power.setLed(255);
+  long wifiTimer = millis();
+  String SSID = connectWiFi(wifiJson);
+  if (SSID != "") {
+    while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
+      delay(1000);
+    }
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    syncTime();
+  }
+  dateTime = M5.Rtc.getDateTime();
+  WiFi.disconnect(true);
+  M5.Power.setLed(0);
+}
+
 void lowPowSleep() {
   uint8_t touch = 0;
   bool charged = M5.Power.Axp2101.isVBUS();
@@ -578,21 +596,8 @@ void lowPowSleep() {
       if (timeSyncMinute == 60) timeSyncMinute = random(60);
       if (dateTime.time.minutes == timeSyncMinute) {
         timeSyncMinute = 60;
-        M5.Power.setLed(255);
-        long wifiTimer = millis();
-        String SSID = connectWiFi(wifiJson);
-        if (SSID != "") {
-          while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
-            delay(1000);
-          }
-        }
-        if (WiFi.status() == WL_CONNECTED) {
-          syncTime();
-        }
-        dateTime = M5.Rtc.getDateTime();
+        connectWiFiAndTimeSync();
         lastSync = dateTime.date.date+(dateTime.date.month<<5);
-        WiFi.disconnect(true);
-        M5.Power.setLed(0);
       }
     }
     if (modelType == 10) {
@@ -644,7 +649,10 @@ void activeSleep() {
         lowPowTimer = 0;
       }
       if (lowPowTimer == 600) {
-        lowPowSleep();
+        if (autoShutdown && timers.size() == 0) {
+          connectWiFiAndTimeSync();
+          M5.Power.powerOff();
+        } else lowPowSleep();
         break;
       }
     }
