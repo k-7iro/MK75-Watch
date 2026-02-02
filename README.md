@@ -1,13 +1,63 @@
 # MK75-Watch
 > [!IMPORTANT]
+> There are no stable releases in this repository, so some features may be gimmicky.
+
+This is a smartwatch/multi-function clock for M5Stack Core2/CoreS3. It does not have a heart rate monitor, but it can be integrated with various modules.
+
+## Purchase Hardware
+> [!IMPORTANT]
+> - Please note that functionality varies depending on the M5Stack model.
+> - Fire will be supported in the future, but is not recommended. Even after support is added, an external RTC will still be required.
+
+| | Basic V2.7 | Fire V2.7 | Core2 (V1.1) | CoreS3 SE | CoreS3 (Lite) | 
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| Supported status | :x:Not supported | :x:Not supported | :white_check_mark:Supported, Recommended | :warning:Supported, Not Recommended | :white_check_mark:Supported, Recommended |
+| PSRAM (Needed) | :x: | :white_check_mark: |:white_check_mark: | :white_check_mark: | :white_check_mark: |
+| RTC (Needed) | :x:External | :x:External |:white_check_mark:Internal | :white_check_mark:Internal | :white_check_mark:Internal |
+| Touch Screen (Needed) | :x: | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| 3 Buttons (Alternative) | :white_check_mark:Physical | :white_check_mark:Physical  | :white_check_mark:Capacitive | :x: | :x: |
+| 6-axis IMU (Recommended) | :x: | :white_check_mark: |:white_check_mark: | :x: | :white_check_mark: |
+| 3-axis Compass | :x: | :x: | :x: | :x: | :white_check_mark: |
+| Env. Light Sensor | :x: | :x: | :x: | :x: | :white_check_mark: |
+| Vibration | :x: | :x: | :white_check_mark: | :x: | :x: |
+| Color | Black | Red | White | White | Darkgray |
+| Price and Shop link | [$39.90](https://shop.m5stack.com/products/esp32-basic-core-lot-development-kit-v2-7) | [$49.90](https://shop.m5stack.com/products/m5stack-fire-iot-development-kit-psram-v2-7) | [$46.90 (V1.1)](https://shop.m5stack.com/products/m5stack-core2-esp32-iot-development-kit-v1-1) | [$38.90](https://shop.m5stack.com/products/m5stack-cores3-se-iot-controller-w-o-battery-bottom) | [$44.90 (Lite)](https://shop.m5stack.com/products/m5stack-cores3-lite-esp32s3-iot-dev-kit)
+
+- PSRAM is required for screen drawing.
+- RTC is required for keeping the time. For models without an RTC, an external RTC can be installed.
+- The touchscreen is used for most operations.
+- The 3 buttons can be used as an alternative to the touchscreen, but some apps will not work.
+- The 6-axis gyro sensor is required for the "tilt to wake" feature.
+- The 3-axis compass is required for the compass app (not yet implemented, planned).
+- The ambient light sensor is required for automatic screen brightness adjustment.
+- Vibration is activated by button touch and when charging.
+
+To use it as a smartwatch, you will also need a [Watch Development Kit w/ Orange Strap (Excluding Core) v1.1](https://shop.m5stack.com/products/watch-development-kit-w-orange-strap-excluding-core-v1-1) (sold separately).
+
+## How to Use
+WIP
+
+## Notes
+- The M5Stack is not waterproof. Do not take it outside on rainy days.
+- It is quite large for a watch (Core2: approximately 5.4 x 5.4 x 2 cm). Be prepared.
+- The M5Stack is designed for indoor use. I didn't notice any issues in sunny weather (other than discoloration of the exterior), but please use it at your own risk.
+- ~~While the product includes data for printing a cover using a 3D printer, ~~complete waterproofing cannot be guaranteed. Please think of the cover as a way to protect the exterior from scratches and increase the chances of survival in an accident.
+- It will take some time to include the cover data due to complicated software licensing issues.
+
+## Acknowledgments
+- I used this link as a reference for setting the time: https://github.com/m5stack/M5Unified/blob/master/examples/Basic/Rtc/Rtc.ino
+- I used this link for icons not included in the images folder: https://icooon-mono.com/
+- The icons included in the images folder were generated using LMArena's AI generators, including Nano Banana (although I only use Nano Banana and Nano Banana Pro).
+
+# 日本語
+> [!IMPORTANT]
 > このレポジトリに安定リリースは存在していません。そのため、一部の機能がハリボテだったりします。
 
 M5Stack Core2/CoreS3用スマートウォッチ/多機能置時計です。心拍数機能などはありませんが、モジュール等で様々な連携が行えます。
 
-## 購入
+## ハードウェアの購入
 > [!IMPORTANT]
 > - M5Stackのモデルによって機能が異なります。ご注意ください。
-> - 開発者のK-Nanaは2025年12月15日現在Core2 V1.1のみ所持しております。Core2以外のモデルでのみ発生するバグは報告されても修正が遅れる可能性があります。
 > - Fireは対応予定ですが、非推奨です。また、対応後も使用には外部RTCを取り付ける必要があります。
 
 | | Basic V2.7 | Fire V2.7 | Core2 (V1.1) | CoreS3 SE | CoreS3 (Lite) | 
@@ -36,7 +86,7 @@ M5Stack Core2/CoreS3用スマートウォッチ/多機能置時計です。心�
 スマートウォッチとして使用するには、別売りの[ウォッチデバイス化キット](https://ssci.to/9492)も必要です。また、別売りの画面保護フィルム（[Basic/Fire用](https://www.amazon.co.jp/dp/B07KF5KWJP)・[Core2用](https://www.amazon.co.jp/dp/B08HMQW367)・[CoreS3用](https://www.amazon.co.jp/dp/B0C4XVTVV8)）も同時に購入することを強くお勧めします。3Dプリンターをお持ちの場合は、カバーを印刷し装着することをお勧めします。
 
 ## 使い方
-使って慣れろ。
+後日記載
 
 ## 注意点
 - M5Stackに防水機能は全くありません。雨の日に外に持ち出さないでください。

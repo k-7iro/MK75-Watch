@@ -46,7 +46,6 @@ void drawCircleWithAA(LovyanGFX *target, int32_t x, int32_t y, int32_t radius, i
                 int16_t mixedColor;
                 if (iy >= radius*(0.70710678118)) { // 1/√2
                     float borderDeci = border-borderInt;
-                    Serial.println(borderDeci);
                     mixedColor = mixColor(outColor, color, borderDeci);
                 } else {
                     float border2 = sqrt(pow(radius, 2)-pow(iy, 2));

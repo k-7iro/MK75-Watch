@@ -18,6 +18,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <esp_sntp.h>
+#include <Preferences.h>
 #include <map>
 #include "assets/images.hpp"
 #include "assets/sounds.hpp"
@@ -59,7 +60,7 @@ std::list<long> timers; // WHY IT'S LIST!? It should be array.
 WiFiServer server(80);
 String header;
 
-const String lang = "ja";
+char lang[3];
 String nowApp = "";
 
 String UIAddtional = "";
@@ -77,7 +78,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const int32_t version = 2601001;
+const int32_t version = 2602002;
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
 const IPAddress subnet(255, 255, 255, 0);
@@ -337,16 +338,16 @@ String connectHTTP(String url) {
 void syncTime() {
   long tmrStart = millis();
   configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
-  Serial.println("Synctime 1");
+  // Serial.println("Synctime 1");
   while (!(sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED or (millis()-tmrStart) > 10000)) {
     delay(1000);
   }
-  Serial.println("Synctime 2");
+  // Serial.println("Synctime 2");
   time_t t = time(nullptr)+1; // Advance one second.
   while (t > time(nullptr));  // Synchronization in seconds
-  Serial.println("Synctime 3");
+  // Serial.println("Synctime 3");
   M5.Rtc.setDateTime(localtime(&t));
-  Serial.println("OK!");
+  // Serial.println("OK!");
 }
 
 void syncTimeOnSettings() {
@@ -439,6 +440,7 @@ m5::rtc_datetime_t getNextDay(m5::rtc_datetime_t date) {
   } else {
     result.date.date += 1;
   }
+  result.date.weekDay = (result.date.weekDay+1)%7;
   return result;
 }
 
@@ -463,7 +465,7 @@ void setRTCAlarmIRQ() {
           daysAdd = i;
         }
       }
-      uint32_t time = loopAlarmTime-nowTime+(86400*daysAdd);
+      uint32_t time = (86400*daysAdd)+loopAlarmTime-nowTime;
       if (nextAlarmTime > time) {
         nextAlarmTime = time;
         nextAlarmHour = loopAlarm["hour"];
@@ -472,13 +474,28 @@ void setRTCAlarmIRQ() {
       }
     }
   }
-  m5::rtc_datetime_t nextAlarm = dateTime;
-  nextAlarm.time.hours = nextAlarmHour;
-  nextAlarm.time.minutes = nextAlarmMinutes;
-  nextAlarm.time.seconds = 0;
-  for (uint8_t i; i < nextAlarmDays; i++) nextAlarm = getNextDay(nextAlarm);
-  if (nextAlarmTime != UINT_MAX) M5.Rtc.setAlarmIRQ(nextAlarm.date, nextAlarm.time);
-  else M5.Rtc.disableIRQ();
+  if (nextAlarmTime != UINT_MAX) {
+    m5::rtc_datetime_t nextAlarm = dateTime;
+    nextAlarm.time.hours = nextAlarmHour;
+    nextAlarm.time.minutes = nextAlarmMinutes;
+    nextAlarm.time.seconds = 0;
+    for (uint8_t i; i < nextAlarmDays; i++) nextAlarm = getNextDay(nextAlarm);
+    // Serial.print(nextAlarm.date.year);
+    // Serial.print("/");
+    // Serial.print(nextAlarm.date.month);
+    // Serial.print("/");
+    // Serial.print(nextAlarm.date.date);
+    // Serial.print("/");
+    // Serial.print(week[nextAlarm.date.weekDay]);
+    // Serial.print(" ");
+    // Serial.print(nextAlarm.time.hours);
+    // Serial.print(":");
+    // Serial.println(nextAlarm.time.seconds);
+    M5.Rtc.setAlarmIRQ(nextAlarm.date, nextAlarm.time);
+  } else {
+    M5.Rtc.disableIRQ();
+    Serial.print("no alarms");
+  }
 }
 
 bool checkAlarm() {
@@ -493,6 +510,7 @@ bool checkAlarm() {
       if (dateTime.time.hours == hour and dateTime.time.minutes == min and lastAlarmMin != min) {
         lastAlarmMin = min;
         notice("Alarm", forceDigits(hour, 2)+":"+forceDigits(min, 2));
+        M5.Rtc.clearIRQ();
         setRTCAlarmIRQ();
         return true;
       }
@@ -693,23 +711,77 @@ void beep() {
 // Settings
 void powerOff() { M5.Power.powerOff(); }
 
-void resetWiFi() {
-  SPIFFS.remove("/wifi.json");
-}
+void settings_init();
+void settings_changeLang();
+void settings_changeLangButton(String langTarget);
+void settings_save();
+void settings_loop();
+
+bool settings_saved = true;
+
+// void resetWiFi() {
+//   SPIFFS.remove("/wifi.json");
+// }
 
 void settings_init() {
   appStart = millis();
-  M5.Speaker.begin();
-  M5.Speaker.setVolume(127);
   appUI = new UI;
   haveToDeleteAppUI = true;
   appUI->setTitle("Settings");
-  appUI->addItem((String) "lpsleep", callLowPowSleep, (String) "Low Power Sleep");
-  appUI->addItem((String) "shutdown", powerOff, (String) "Shutdown");
+  appUI->setLocaleFont("en", 0);
+  appUI->setLocaleFont("ja", 1);
+  appUI->addLocaleToTitle("ja", "設定");
+  appUI->addItem("save", settings_save, "Save");
+  appUI->addLocaleToItem("save", "ja", "保存");
+  if (settings_saved) {
+    appUI->addRightLocaleToItem("save", "en", "Saved");
+    appUI->addRightLocaleToItem("save", "ja", "保存済み");
+    appUI->setItemRightColor("save", M5.Display.color888(0, 255, 0));
+  } else {
+    appUI->addRightLocaleToItem("save", "en", "Not Saved");
+    appUI->addRightLocaleToItem("save", "ja", "未保存");
+    appUI->setItemRightColor("save", M5.Display.color888(255, 0, 0));
+  }
+  //appUI->addItem((String) "lpsleep", callLowPowSleep, (String) "Low Power Sleep");
+  //appUI->addItem((String) "shutdown", powerOff, (String) "Shutdown");
   appUI->addItem((String) "synctime", syncTimeOnSettings, (String) "Sync Time");
-  appUI->addItem((String) "resetwifi", resetWiFi, (String) "Reset Wi-Fi");
+  appUI->addLocaleToItem("synctime", "ja", "時刻合わせ");
+  appUI->addItem((String) "lang", settings_changeLang, (String) "Change Language");
+  appUI->addLocaleToItem("lang", "ja", "言語変更");
+  //appUI->addItem((String) "resetwifi", resetWiFi, (String) "Reset Wi-Fi");
   appUI->linkFunctionToBack(appEnd);
   appUI->makeUI(lang);
+}
+
+void settings_changeLang() {
+  appStart = millis();
+  appUI = new UI;
+  haveToDeleteAppUI = true;
+  appUI->setTitle("Change Language");
+  appUI->addItem((String) "en", settings_changeLangButton, (String) "English");
+  appUI->addItem((String) "ja", settings_changeLangButton, (String) "Japanese");
+  appUI->linkFunctionToBack(settings_init);
+  appUI->makeUI();
+}
+
+void settings_changeLangButton(String langTarget) {
+  lang[0] = langTarget.charAt(0);
+  lang[1] = langTarget.charAt(1);
+  settings_saved = false;
+  settings_init();
+}
+
+void settings_save() {
+  if (!settings_saved) {
+    settings_saved = true;
+    Preferences pref;
+    pref.begin("mk75_settings");
+    pref.putString("lang", lang);
+    pref.end();
+    appUI->addRightLocaleToItem("save", "en", "Saved");
+    appUI->addRightLocaleToItem("save", "ja", "保存済み");
+    appUI->setItemRightColor("save", M5.Display.color888(0, 255, 0));
+  }
 }
 
 void settings_loop() {
@@ -738,16 +810,23 @@ void alarm_init() {
   }
   appUI = new UI;
   haveToDeleteAppUI = true;
+  appUI->setLocaleFont("en", 0);
+  appUI->setLocaleFont("ja", 1);
   appUI->setTitle("Alarm");
+  appUI->addLocaleToTitle("ja", "アラーム");
   appUI->addItem("save", alarm_save, "Save");
+  appUI->addLocaleToItem("save", "ja", "保存");
   if (alarm_saved) {
     appUI->addRightLocaleToItem("save", "en", "Saved");
+    appUI->addRightLocaleToItem("save", "ja", "保存済み");
     appUI->setItemRightColor("save", M5.Display.color888(0, 255, 0));
   } else {
     appUI->addRightLocaleToItem("save", "en", "Not Saved");
+    appUI->addRightLocaleToItem("save", "ja", "未保存");
     appUI->setItemRightColor("save", M5.Display.color888(255, 0, 0));
   }
   appUI->addItem("add", alarm_add, "+ Add Alarm");
+  appUI->addLocaleToItem("add", "ja", "+ アラームを追加");
   uint8_t cnt = 0;
   for( JsonObject loopAlarm : alarmJson.as<JsonArray>() ) {
     int32_t hour = loopAlarm["hour"];
@@ -788,13 +867,22 @@ void alarm_config(String name) {
   appUI = new UI;
   haveToDeleteAppUI = true;
   appUI->setTitle("Edit Alarm");
+  appUI->setLocaleFont("en", 0);
+  appUI->setLocaleFont("ja", 1);
+  appUI->addLocaleToTitle("ja", "アラームを編集");
   appUI->addItem("time", alarm_chooseTime, "Time");
+  appUI->addLocaleToItem("time", "ja", "時刻");
   appUI->addRightLocaleToItem("time", "en", forceDigits(alarmJson[alarm_toConfig]["hour"], 2)+":"+forceDigits(alarmJson[alarm_toConfig]["min"], 2));
   appUI->addItem("weekday", alarm_switchWeekday, "Weekday");
+  appUI->addLocaleToItem("weekday", "ja", "平日");
   appUI->addRightLocaleToItem("weekday", "en", boolStr(alarmJson[alarm_toConfig]["weekday"], "Enable", "Disable"));
+  appUI->addRightLocaleToItem("weekday", "ja", boolStr(alarmJson[alarm_toConfig]["weekday"], "有効", "無効"));
   appUI->addItem("weekend", alarm_switchWeekend, "Weekend");
+  appUI->addLocaleToItem("weekend", "ja", "休日");
   appUI->addRightLocaleToItem("weekend", "en", boolStr(alarmJson[alarm_toConfig]["weekend"], "Enable", "Disable"));
+  appUI->addRightLocaleToItem("weekend", "ja", boolStr(alarmJson[alarm_toConfig]["weekday"], "有効", "無効"));
   appUI->addItem("remove", alarm_remove, "Remove");
+  appUI->addLocaleToItem("remove", "ja", "削除");
   appUI->linkFunctionToBack(alarm_init);
   appUI->makeUI(lang);
 }
@@ -804,11 +892,14 @@ void alarm_configNow() {
 }
 
 void alarm_save() {
-  alarm_saved = true;
-  appUI->addRightLocaleToItem("save", "en", "Saved");
-  appUI->setItemRightColor("save", M5.Display.color888(0, 255, 0));
-  writeSPIJson("/alarm.json", &alarmJson);
-  appUI->makeUI();
+  if (!alarm_saved) {
+    alarm_saved = true;
+    appUI->addRightLocaleToItem("save", "en", "Saved");
+    appUI->addRightLocaleToItem("save", "ja", "保存済み");
+    appUI->setItemRightColor("save", M5.Display.color888(0, 255, 0));
+    writeSPIJson("/alarm.json", &alarmJson);
+    appUI->makeUI(lang);
+  }
 }
 
 void alarm_setTime() {
@@ -843,6 +934,7 @@ void alarm_switchWeekday() {
   alarm_saved = false;
   alarmJson[alarm_toConfig]["weekday"] = !alarmJson[alarm_toConfig]["weekday"];
   appUI->addRightLocaleToItem("weekday", "en", boolStr(alarmJson[alarm_toConfig]["weekday"], "Enable", "Disable"));
+  appUI->addRightLocaleToItem("weekday", "ja", boolStr(alarmJson[alarm_toConfig]["weekday"], "有効", "無効"));
   appUI->makeUI(lang);
 }
 
@@ -850,6 +942,7 @@ void alarm_switchWeekend() {
   alarm_saved = false;
   alarmJson[alarm_toConfig]["weekend"] = !alarmJson[alarm_toConfig]["weekend"];
   appUI->addRightLocaleToItem("weekend", "en", boolStr(alarmJson[alarm_toConfig]["weekend"], "Enable", "Disable"));
+  appUI->addRightLocaleToItem("weekday", "ja", boolStr(alarmJson[alarm_toConfig]["weekday"], "有効", "無効"));
   appUI->makeUI(lang);
 }
 
@@ -911,10 +1004,18 @@ void stopwatch_make(M5Canvas& target, uint8_t id) {
 
 void stopwatch_init() {
   cv_display.clear();
-  cv_stwt_top.createSprite(sizeX, 31);
-  cv_stwt_top.fillRect(0, 0, sizeX, 31, TFT_WHITE);
+  cv_stwt_top.createSprite(sizeX, 47);
+  cv_stwt_top.fillRect(0, 0, sizeX, 47, TFT_WHITE);
   cv_stwt_top.setTextColor(TFT_BLACK, TFT_WHITE);
-  cv_stwt_top.drawCenterString("Stopwatch", sizeX/2, 1, &fonts::efontJA_24);
+  if (strcmp(lang, "ja") == 0) {
+    cv_stwt_top.drawCenterString("ストップウォッチ", sizeX/2, 9, &fonts::efontJA_24);
+  } else {
+    cv_stwt_top.drawCenterString("Stopwatch", sizeX/2, 9, &fonts::Font4);
+  }
+  uint16_t lightRed = M5.Display.color565(0xff, 0xaa, 0xaa);
+  cv_stwt_top.fillRect(0, 0, 54, 56, lightRed);
+  cv_stwt_top.setTextColor(BLACK, lightRed);
+  cv_stwt_top.drawString("<", 20, 10, &fonts::Font4);
   cv_stwt_top.pushSprite(0, 17);
   stwt_swipe = 0;
   stopwatch_make(cv_stwt1, 0);
@@ -937,26 +1038,32 @@ void stopwatch_loop() {
   if (M5.BtnA.wasPressed()) {
     appEnd();
   } else if (M5.Touch.getCount() > 0 or detail.wasClicked()) {
-    scrollsWhenTouch(detail, &stwt_swipe);
-    if (inLimit(detail.x, (sizeX/2)-85, (sizeX/2)+85) and inLimit(detail.y, (sizeY/2)-60, (sizeY/2)+110) and !stwt_afterReset and (stwt_swipe % sizeX) == 0) {
-      stwt_touchedID = round(stwt_swipe/sizeX);
-      stwt_touchedTime += prevLoopTime;
-      if (!stwt_wasTouched) {
-        if (stwts[stwt_touchedID] == 0) {
-          stwts[stwt_touchedID] = millis();
-        } else if (stwts_stop[stwt_touchedID] == 0) {
-          stwts_stop[stwt_touchedID] = millis();
-        } else {
-          stwts[stwt_touchedID] += millis()-stwts_stop[stwt_touchedID];
+    if (detail.y > 64) {
+      scrollsWhenTouch(detail, &stwt_swipe);
+      if (inLimit(detail.x, (sizeX/2)-85, (sizeX/2)+85) and inLimit(detail.y, (sizeY/2)-60, (sizeY/2)+110) and !stwt_afterReset and (stwt_swipe % sizeX) == 0) {
+        stwt_touchedID = round(stwt_swipe/sizeX);
+        stwt_touchedTime += prevLoopTime;
+        if (!stwt_wasTouched) {
+          if (stwts[stwt_touchedID] == 0) {
+            stwts[stwt_touchedID] = millis();
+          } else if (stwts_stop[stwt_touchedID] == 0) {
+            stwts_stop[stwt_touchedID] = millis();
+          } else {
+            stwts[stwt_touchedID] += millis()-stwts_stop[stwt_touchedID];
+            stwts_stop[stwt_touchedID] = 0;
+          }
+        }
+        stwt_wasTouched = true;
+        if (stwt_touchedTime > 1000) {
+          stwts[stwt_touchedID] = 0;
           stwts_stop[stwt_touchedID] = 0;
+          stwt_touchedTime = 0;
+          stwt_afterReset = true;
         }
       }
-      stwt_wasTouched = true;
-      if (stwt_touchedTime > 1000) {
-        stwts[stwt_touchedID] = 0;
-        stwts_stop[stwt_touchedID] = 0;
-        stwt_touchedTime = 0;
-        stwt_afterReset = true;
+    } else if ((detail.y > 16) && (detail.wasClicked())) {
+      if (detail.x <= 34) {
+        appEnd();
       }
     }
   } else {
@@ -967,23 +1074,23 @@ void stopwatch_loop() {
   }
   if (inLimit(stwt_swipe, (sizeX*-1)+1, (sizeX*1)-1)) {
     stopwatch_redraw(cv_stwt1, 0);
-    cv_stwt1.pushSprite((sizeX/2)-85-stwt_swipe, (sizeY/2)-60);
+    cv_stwt1.pushSprite((sizeX/2)-85-stwt_swipe, (sizeY/2)-50);
   }
   if (inLimit(stwt_swipe, (sizeX*0)+1, (sizeX*2)-1)) {
     stopwatch_redraw(cv_stwt2, 1);
-    cv_stwt2.pushSprite((sizeX/2)+235-stwt_swipe, (sizeY/2)-60);
+    cv_stwt2.pushSprite((sizeX/2)+235-stwt_swipe, (sizeY/2)-50);
   }
   if (inLimit(stwt_swipe, (sizeX*1)+1, (sizeX*3)-1)) {
     stopwatch_redraw(cv_stwt3, 2);
-    cv_stwt3.pushSprite((sizeX/2)+555-stwt_swipe, (sizeY/2)-60);
+    cv_stwt3.pushSprite((sizeX/2)+555-stwt_swipe, (sizeY/2)-50);
   }
   if (inLimit(stwt_swipe, (sizeX*2)+1, (sizeX*4)-1)) {
     stopwatch_redraw(cv_stwt4, 3);
-    cv_stwt4.pushSprite((sizeX/2)+875-stwt_swipe, (sizeY/2)-60);
+    cv_stwt4.pushSprite((sizeX/2)+875-stwt_swipe, (sizeY/2)-50);
   }
   if (inLimit(stwt_swipe, (sizeX*3)+1, (sizeX*5)-1)) {
     stopwatch_redraw(cv_stwt5, 4);
-    cv_stwt5.pushSprite((sizeX/2)+1195-stwt_swipe, (sizeY/2)-60);
+    cv_stwt5.pushSprite((sizeX/2)+1195-stwt_swipe, (sizeY/2)-50);
   }
   cv_display.pushSprite(0, 0);
 }
@@ -1221,7 +1328,10 @@ void timer_init() {
   appUI = new UI;
   haveToDeleteAppUI = true;
   appUI->setTitle("Timer");
+  appUI->setLocaleFont("en", 1);
+  appUI->setLocaleFont("ja", 1);
   appUI->addItem("add", timer_make, "+ Add Timer");
+  appUI->addLocaleToItem("add", "ja", "+ タイマーを追加");
   uint8_t cnt = 1;
   for(auto i = timers.begin(); i != timers.end(); i++ ) {
     uint32_t remains = (*i - millis())/1000;
@@ -1229,7 +1339,7 @@ void timer_init() {
     cnt++;
   }
   appUI->linkFunctionToBack(appEnd);
-  appUI->makeUI();
+  appUI->makeUI(lang);
 }
 
 void timer_make() {
@@ -1239,6 +1349,9 @@ void timer_make() {
   appUI = new UI;
   haveToDeleteAppUI = true;
   appUI->setTitle("Set Timer");
+  appUI->setLocaleFont("en", 1);
+  appUI->setLocaleFont("ja", 1);
+  appUI->addLocaleToTitle("ja", "タイマーをセット");
   appUI->setTransparentMode(true);
   UIAddtional = "time";
   cv_timesel.createSprite(300, 165);
@@ -1247,7 +1360,7 @@ void timer_make() {
   M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
   drawTimeUI();
   appUI->linkFunctionToBack(timer_start);
-  appUI->makeUI();
+  appUI->makeUI(lang);
 }
 
 void timer_start() {
@@ -1268,10 +1381,14 @@ void timer_edit(String id) {
   timer_editingMillis = *std::next(timers.begin(), timer_editing-1);
   uint32_t remains = (timer_editingMillis - millis())/1000;
   appUI->setTitle("Edit Timer");
+  appUI->setLocaleFont("en", 1);
+  appUI->setLocaleFont("ja", 1);
+  appUI->addLocaleToTitle("ja", "タイマーを編集");
   appUI->addItem("timer", nothing, String((uint8_t) floor(remains/60))+":"+String(remains%60));
   appUI->addItem("remove", timer_remove, "Remove Timer");
+  appUI->addLocaleToItem("add", "ja", "タイマーを削除");
   appUI->linkFunctionToBack(timer_init);
-  appUI->makeUI();
+  appUI->makeUI(lang);
 }
 
 void timer_remove() {
@@ -1287,11 +1404,11 @@ void timer_loop() {
       appUI->addLocaleToItem(String(cnt), "en", String((uint8_t) floor((remains)/60))+":"+String((remains)%60));
       cnt++;
     }
-    appUI->makeUI();
+    appUI->makeUI(lang);
   } else if (timer_editing != 0) {
     uint32_t remains = (timer_editingMillis - millis())/1000;
     appUI->addLocaleToItem("timer", "en", String((uint8_t) floor((remains)/60))+":"+String((remains)%60));
-    appUI->makeUI();
+    appUI->makeUI(lang);
   }
   appUI->update(dateTime, battery);
 }
@@ -1460,7 +1577,7 @@ void wifiInitialSetup() {
       if (client) {
         client.setTimeout(1000);
         String request = client.readStringUntil('\n');
-        Serial.println(request);
+        // Serial.println(request);
         while (client.available()) client.read();
         if (request.endsWith("\r")) request = request.substring(0, request.length()-1);
         std::list<String> reqSplit = split(request, ' ');
@@ -1470,8 +1587,8 @@ void wifiInitialSetup() {
           std::list<String> dirSplit = split(*reqSplitItr, '/');
           std::list<String>::iterator dirSplitItr = dirSplit.begin();
           uint32_t dirSplitLength = dirSplit.size();
-          Serial.println(*dirSplitItr);
-          Serial.println(dirSplitLength);
+          // Serial.println(*dirSplitItr);
+          // Serial.println(dirSplitLength);
           if (dirSplitLength == 0) {
             client.print(Error404);
           } else if (*dirSplitItr == "wifi-setup") {
@@ -1514,7 +1631,7 @@ void wifiInitialSetup() {
     WiFi.begin(trySSID, tryPass);
     while (!(WiFi.status() == WL_CONNECTED or (millis()-wifiTimer) > 10000)) {
       delay(1000);
-      Serial.print(".");
+      // Serial.print(".");
     }
     if (WiFi.status() == WL_CONNECTED) notConnected = false;
   }
@@ -1523,7 +1640,7 @@ void wifiInitialSetup() {
   wifiJson[trySSID] = tryPass;
   writeSPIJson("/wifi.json", &wifiJson);
   M5.Display.println("Finished. Syncing time...");
-  Serial.println(WiFi.status());
+  // Serial.println(WiFi.status());
   syncTime();
   M5.Display.println("Finished.");
   WiFi.disconnect(true);
@@ -1564,6 +1681,12 @@ void setupConfigs() {
     setRTCAlarmIRQ();
     M5.Display.print("Loading special dates json...");
     M5.Display.println(successOrFail(readSPIJson("/special_dates.json", &spDatesJson, 10000)));
+    Preferences pref;
+    pref.begin("mk75_settings");
+    String langStr = pref.getString("lang", "en");
+    lang[0] = langStr.charAt(0);
+    lang[1] = langStr.charAt(1);
+    pref.end();
     delay(1000);
     checkAlarm();
     M5.Display.clear();
@@ -1584,16 +1707,15 @@ void setupSprites() {
 
 void drawMenu() {
   cv_menu.clear();
-  cv_menu.setFont(&lgfxJapanMincho_40);
   for (int8_t i = 0; i < howManyApps; i++) {
     if (inLimit(i*120, screenSwipeVertical-220, screenSwipeVertical+220)) {
       // パフォーマンス重視ならfillRoundRectではなくfillRectを使うべきかもしれない
       cv_menu.fillRoundRect(105-screenSwipe, (i*120)+75-screenSwipeVertical, 90, 90, 5, WHITE);
       cv_menu.fillRoundRect(110-screenSwipe, (i*120)+80-screenSwipeVertical, 80, 80, 4, BLACK);
       cv_menu.pushImage(110-screenSwipe, (i*120)+80-screenSwipeVertical, 80, 80, icons[i]);
-      if (lang == "ja") {
+      if (strcmp(lang, "ja") == 0) {
         cv_menu.drawCenterString(appsJa[i], 150-screenSwipe, (i*120)+170-screenSwipeVertical, &fonts::efontJA_16);
-      } else if (lang == "en") {
+      } else if (strcmp(lang, "en") == 0) {
         cv_menu.drawCenterString(appsEn[i], 150-screenSwipe, (i*120)+170-screenSwipeVertical, &fonts::Font2);
       } else {
         //cv_menu.drawCenterString("ERROR. LOL", (ix*105)+(sizeX/2), ((iy*85)-45)+(sizeY/2), &fonts::Font2);
@@ -1722,7 +1844,6 @@ void setup() {
   M5.Display.init();
   M5.Display.setBrightness(63);
   dateTime = M5.Rtc.getDateTime();
-  M5.Rtc.clearIRQ();
   setupConfigs();
   setupSprites();
   //setupMenu();
