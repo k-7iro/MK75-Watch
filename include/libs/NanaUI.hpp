@@ -19,9 +19,9 @@ typedef void (*pArgFunc)(String);
 class UI {
   public:
     void setTitle(String title);
-    void setTitle(String title, String lang);
+    void setTitle(String title, const char lang[3]);
     void makeUI();
-    void makeUI(String lang);
+    void makeUI(const char lang[3]);
     void update(m5::rtc_datetime_t dateTime, uint8_t battery);
     void addItem(String id);
     void addItem(String id, String defName);
@@ -32,12 +32,12 @@ class UI {
     void addItem(String id, pArgFunc func);
     void addItem(String id, pArgFunc func, String defName);
     void addItem(String id, pArgFunc func, String defName, String defLang);
-    void addLocaleToItem(String id, String lang, String name);
-    void addRightLocaleToItem(String id, String lang, String name);
-    void addLocaleToTitle(String lang, String name);
+    void addLocaleToItem(String id, const char lang[3], String name);
+    void addRightLocaleToItem(String id, const char lang[3], String name);
+    void addLocaleToTitle(const char lang[3], String name);
     void setItemColor(String id, uint32_t color);
     void setItemRightColor(String id, uint32_t color);
-    void setLocaleFont(String lang, uint8_t font);
+    void setLocaleFont(const char lang[3], uint8_t font);
     void setSpace(int space);
     void linkFunctionToBack(pFunc func);
     void linkFunctionToItem(String id, pFunc func);
@@ -75,7 +75,7 @@ void UI::setTitle(String title) {
   titleLocale["en"] = title;
 }
 
-void UI::setTitle(String title, String lang) {
+void UI::setTitle(String title, const char lang[3]) {
   titleLocale[lang] = title;
 }
 
@@ -83,7 +83,7 @@ void UI::makeUI() {
   makeUI("en");
 }
 
-void UI::makeUI(String lang) {
+void UI::makeUI(const char lang[3]) {
   int width = M5.Display.width();
   int height = M5.Display.height();
   int UIHeight;
@@ -266,15 +266,15 @@ void UI::addItem(String id, pArgFunc func, String defName, String defLang) {
   itemUseArgFunction[id] = true;
 }
 
-void UI::addLocaleToItem(String id, String lang, String name) {
+void UI::addLocaleToItem(String id, const char lang[3], String name) {
   itemLocale[id][lang] = name;
 }
 
-void UI::addRightLocaleToItem(String id, String lang, String name) {
+void UI::addRightLocaleToItem(String id, const char lang[3], String name) {
   itemRightLocale[id][lang] = name;
 }
 
-void UI::addLocaleToTitle(String lang, String name) {
+void UI::addLocaleToTitle(const char lang[3], String name) {
   titleLocale[lang] = name;
 }
 
@@ -286,7 +286,7 @@ void UI::setItemRightColor(String id, uint32_t color) {
   itemRightColor[id] = color;
 }
 
-void UI::setLocaleFont(String lang, uint8_t font) {
+void UI::setLocaleFont(const char lang[3], uint8_t font) {
   localeFont[lang] = font;
 }
 
