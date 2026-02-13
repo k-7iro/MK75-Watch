@@ -12,7 +12,7 @@
 #include <M5Unified.h>
 #include <M5GFX.h>
 #include <SD.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include <Wire.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -78,7 +78,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const int32_t version = 2602002;
+const int32_t version = 2602003;
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
 const IPAddress subnet(255, 255, 255, 0);
@@ -115,6 +115,7 @@ bool haveToDeleteAppUI = false;
 bool appMenu = false;
 bool touchedOnMenu = false;
 bool autoShutdown = true; // 設定可能WIP
+bool doDraw = true;
 
 uint8_t battery = M5.Power.getBatteryLevel();
 m5::rtc_datetime_t dateTime;
@@ -232,7 +233,7 @@ int monthLastDay(int month, int year) {
 
 bool readSPIJson(String filename, JsonDocument *target, int32_t timeout) { // エラーコードを返す
   JsonDocument temp;
-  File file = SPIFFS.open(filename, FILE_READ);
+  File file = LittleFS.open(filename, FILE_READ);
   if (file) {
     DeserializationError error = deserializeJson(temp, file);
     file.close();
@@ -248,8 +249,8 @@ bool readSPIJson(String filename, JsonDocument *target, int32_t timeout) { // �
 
 bool writeSPIJson(String filename, JsonDocument *target) {
   JsonDocument temp = *target;
-  if (SPIFFS.exists(filename)) {SPIFFS.remove(filename);}
-  File file = SPIFFS.open(filename, FILE_WRITE);
+  if (LittleFS.exists(filename)) {LittleFS.remove(filename);}
+  File file = LittleFS.open(filename, FILE_WRITE);
   if (file) {
     serializeJson(temp, file);
     file.close();
@@ -618,14 +619,17 @@ void lowPowSleep() {
         lastSync = dateTime.date.date+(dateTime.date.month<<5);
       }
     }
+    noInterrupts();
     if (modelType == 10) {
       esp_sleep_enable_ext0_wakeup(GPIO_NUM_21, false);
       esp_sleep_enable_timer_wakeup(10000000);
       esp_light_sleep_start();
     } else M5.Power.lightSleep(10000000);
+    interrupts();
     M5.update();
     touch = M5.Touch.getCount();
   }
+  
   M5.Power.setExtOutput(true);
   M5.Imu.begin();
 }
@@ -650,11 +654,13 @@ void activeSleep() {
   M5.Display.sleep();
   M5.Power.setExtOutput(false);
   while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
+    noInterrupts();
     if (modelType == 10) {
       esp_sleep_enable_ext0_wakeup(GPIO_NUM_21, false);
       esp_sleep_enable_timer_wakeup(100000);
       esp_light_sleep_start();
     } else M5.Power.lightSleep(100000);
+    interrupts();
     M5.update();
     if ((!charged) and (checkGyro())) break;
     if (alarmTimer == 100) {
@@ -720,7 +726,7 @@ void settings_loop();
 bool settings_saved = true;
 
 // void resetWiFi() {
-//   SPIFFS.remove("/wifi.json");
+//   LittleFS.remove("/wifi.json");
 // }
 
 void settings_init() {
@@ -781,6 +787,7 @@ void settings_save() {
     appUI->addRightLocaleToItem("save", "en", "Saved");
     appUI->addRightLocaleToItem("save", "ja", "保存済み");
     appUI->setItemRightColor("save", M5.Display.color888(0, 255, 0));
+    appUI->makeUI();
   }
 }
 
@@ -1497,7 +1504,7 @@ void updateDigitals() {
 
 bool copySDtoSPI() {
   if (SD.begin(4, SPI)) {
-    File folder = SD.open("/spiffs");
+    File folder = SD.open("/littlefs");
     if (!folder) {
       SD.end();
       return false;
@@ -1508,11 +1515,11 @@ bool copySDtoSPI() {
     File loopFile = folder.openNextFile();
     while (loopFile) {
       String fileName = loopFile.name();
-      String SDPath = "/spiffs/"+fileName;
+      String SDPath = "/LittleFS/"+fileName;
       String SPIPath = "/"+fileName;
-      if (SPIFFS.exists(fileName)) {SPIFFS.remove(fileName);}
+      if (LittleFS.exists(fileName)) {LittleFS.remove(fileName);}
       File SDCardFile = SD.open(SDPath, FILE_READ);
-      File SPIFile = SPIFFS.open(SPIPath, FILE_WRITE);
+      File SPIFile = LittleFS.open(SPIPath, FILE_WRITE);
       int32_t size = SDCardFile.size();
       int32_t progress = 0;
       while (SDCardFile.available()) {
@@ -1663,12 +1670,12 @@ void setupConfigs() {
     M5.Display.println("Unsupported Model");
   }
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-  if (!SPIFFS.begin()) {
-    M5.Display.print("Formatting SPIFFS (It takes long time) ...");
-    SPIFFS.format();
+  if (!LittleFS.begin()) {
+    M5.Display.print("Formatting LittleFS (It takes long time) ...");
+    LittleFS.format();
     M5.Display.println("Success");
   }
-  M5.Display.print("Copying SD Card's contents to SPIFFS...");
+  M5.Display.print("Copying SD Card's contents to LittleFS...");
   M5.Display.println(successOrFail(copySDtoSPI()));
   M5.Display.print("Loading wifi json...");
   bool wifiJsonAvailable = readSPIJson("/wifi.json", &wifiJson, 10000);
@@ -1754,6 +1761,8 @@ void loopSleep() {
   }
 }
 
+// 割り込み関係で動かなくなったら IRAM_ATTR
+
 void loopMenuTouch() {
   if (!afterSlp) {
     if (M5.Touch.getCount() > 0) {
@@ -1833,6 +1842,10 @@ void loopTimeSel() {
   }
 }
 
+void touchInterrupt() {
+  doDraw = false;
+}
+
 void setup() {
   auto cfg = M5.config();
   cfg.internal_imu = true;
@@ -1848,11 +1861,17 @@ void setup() {
   setupSprites();
   //setupMenu();
   wasVBUS = M5.Power.Axp2101.isVBUS();
+  if (modelType == 10) {
+    attachInterrupt(GPIO_NUM_21, touchInterrupt, FALLING);
+  } else {
+    attachInterrupt(GPIO_NUM_39, touchInterrupt, FALLING);
+  }
 }
 
 void loop() {
   int32_t tmrStart = millis();
   M5.update();
+  doDraw = true;
   if (nowApp != "commander") cv_display.clear();
   bool touch = (M5.Touch.getCount() > 0);
   loopSleep();
@@ -1897,16 +1916,16 @@ void loop() {
         // 目標値0
         screenSwipe = floor(screenSwipe/2);
     }
-    updateClock();
-    cv_clock.pushSprite(&cv_display, centerX-ckCenterX-round(screenSwipe/2), centerY-ckCenterY, TFT_BLACK);
-    updateDigitals();
-    cv_day.pushSprite(&cv_display, 1, sizeY-34, TFT_BLACK);
-    cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
+    if (doDraw) updateClock();
+    if (doDraw) cv_clock.pushSprite(&cv_display, centerX-ckCenterX-round(screenSwipe/2), centerY-ckCenterY, TFT_BLACK);
+    if (doDraw) updateDigitals();
+    if (doDraw) cv_day.pushSprite(&cv_display, 1, sizeY-34, TFT_BLACK);
+    if (doDraw) cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
     if (screenSwipe != 0) {
-      drawMenu();
-      cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
+      if (doDraw) drawMenu();
+      if (doDraw) cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
     }
-    cv_display.pushSprite(0, 0);
+    if (doDraw) cv_display.pushSprite(0, 0);
   }
   if (checkAlarmTimer > 10000) {
     checkAlarmTimer = 0;
