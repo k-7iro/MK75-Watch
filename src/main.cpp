@@ -26,6 +26,7 @@
 #include "libs/NanaUI.hpp"
 #include "libs/NanaTools.hpp"
 #include "libs/NanaDrawPlus.hpp"
+#include "libs/SerialFileEdit.hpp"
 #include "new"
 
 #define NTP_TIMEZONE "JST-9" //今後設定で変更可能にする
@@ -56,9 +57,10 @@ JsonDocument wifiJson;
 JsonDocument trainJson;
 JsonDocument alarmJson;
 JsonDocument spDatesJson;
-std::list<long> timers; // WHY IT'S LIST!? It should be array.
+std::list<long> timers;
 WiFiServer server(80);
 String header;
+SerialFileEdit SFE(&Serial, &LittleFS);
 
 char lang[3];
 String nowApp = "";
@@ -754,6 +756,8 @@ void settings_init() {
   appUI->addLocaleToItem("synctime", "ja", "時刻合わせ");
   appUI->addItem((String) "lang", settings_changeLang, (String) "Change Language");
   appUI->addLocaleToItem("lang", "ja", "言語変更");
+  appUI->addItem((String) "power", nothing, (String) "Power Settings");
+  appUI->addLocaleToItem("lang", "ja", "電源設定");
   //appUI->addItem((String) "resetwifi", resetWiFi, (String) "Reset Wi-Fi");
   appUI->linkFunctionToBack(appEnd);
   appUI->makeUI(lang);
@@ -787,7 +791,7 @@ void settings_save() {
     appUI->addRightLocaleToItem("save", "en", "Saved");
     appUI->addRightLocaleToItem("save", "ja", "保存済み");
     appUI->setItemRightColor("save", M5.Display.color888(0, 255, 0));
-    appUI->makeUI();
+    appUI->makeUI(lang);
   }
 }
 
@@ -949,7 +953,7 @@ void alarm_switchWeekend() {
   alarm_saved = false;
   alarmJson[alarm_toConfig]["weekend"] = !alarmJson[alarm_toConfig]["weekend"];
   appUI->addRightLocaleToItem("weekend", "en", boolStr(alarmJson[alarm_toConfig]["weekend"], "Enable", "Disable"));
-  appUI->addRightLocaleToItem("weekday", "ja", boolStr(alarmJson[alarm_toConfig]["weekday"], "有効", "無効"));
+  appUI->addRightLocaleToItem("weekend", "ja", boolStr(alarmJson[alarm_toConfig]["weekend"], "有効", "無効"));
   appUI->makeUI(lang);
 }
 
@@ -1675,6 +1679,7 @@ void setupConfigs() {
     LittleFS.format();
     M5.Display.println("Success");
   }
+  //SFE.begin();
   M5.Display.print("Copying SD Card's contents to LittleFS...");
   M5.Display.println(successOrFail(copySDtoSPI()));
   M5.Display.print("Loading wifi json...");
@@ -1849,11 +1854,11 @@ void touchInterrupt() {
 void setup() {
   auto cfg = M5.config();
   cfg.internal_imu = true;
+  cfg.serial_baudrate = 115200;
   M5.begin(cfg);
   M5.Power.begin();
   M5.Imu.begin();
   M5.Rtc.begin();
-  Serial.begin(115200);
   M5.Display.init();
   M5.Display.setBrightness(63);
   dateTime = M5.Rtc.getDateTime();
@@ -1871,6 +1876,7 @@ void setup() {
 void loop() {
   int32_t tmrStart = millis();
   M5.update();
+  //SFE.update();
   doDraw = true;
   if (nowApp != "commander") cv_display.clear();
   bool touch = (M5.Touch.getCount() > 0);

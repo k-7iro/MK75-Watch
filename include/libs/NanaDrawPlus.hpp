@@ -9,6 +9,8 @@
 #include <M5Unified.h>
 #include <M5GFX.h>
 
+#define SQRT_2_DIV_2 0.70710678118
+
 /* I may or may not use it in the future.
 int32_t mixColor888(int32_t color1, int32_t color2, float ratio) {
     if (ratio <= 0) return color2;
@@ -31,6 +33,54 @@ uint16_t mixColor(uint16_t color1, uint16_t color2, float ratio) {
 }
 
 void drawCircleWithAA(LovyanGFX *target, int32_t x, int32_t y, int32_t radius, int16_t color, int16_t outColor) {
+    int32_t startX = max(0, x-radius);
+    int32_t startY = max(0, y-radius);
+    int32_t endX = min(target->width(), x+radius);
+    int32_t endY = min(target->height(), y+radius);
+    target->startWrite();
+    float prevBorder = radius;
+    int32_t squareRad = floor(radius*SQRT_2_DIV_2);
+    target->fillRect(x-squareRad, y-squareRad, squareRad*2+1, squareRad*2, color);
+    for (int32_t ix = 0; ix <= radius; ix++) {
+        float border = sqrt(pow(radius, 2)-pow(ix, 2));
+        int32_t borderInt = floor(border);
+        int32_t borderIntCeil = borderInt+1;
+        for (int32_t iy = 0; iy <= radius; iy++) {
+            bool notPlacedPixel = true;
+            if (borderIntCeil == iy || (prevBorder > iy && iy > border)) {
+                notPlacedPixel = true;
+                int16_t mixedColor;
+                if (iy >= radius*SQRT_2_DIV_2) {
+                    float borderDeci = border-borderInt;
+                    mixedColor = mixColor(outColor, color, borderDeci);
+                    target->drawFastHLine(x-ix, y-iy+1, (ix*2)+1, color);
+                    target->drawFastHLine(x-ix, y+iy-1, (ix*2)+1, color);
+                } else {
+                    float border2 = sqrt(pow(radius, 2)-pow(iy, 2));
+                    int32_t border2Int = floor(border2);
+                    float border2Deci = border2-border2Int;
+                    mixedColor = mixColor(outColor, color, border2Deci);
+                    target->drawFastVLine(x-ix+1, y-iy, (iy*2)+1, color);
+                    target->drawFastVLine(x+ix-1, y-iy, (iy*2)+1, color);
+                }
+                target->drawPixel(x-ix, y-iy, mixedColor);
+                target->drawPixel(x+ix, y-iy, mixedColor);
+                target->drawPixel(x-ix, y+iy, mixedColor);
+                target->drawPixel(x+ix, y+iy, mixedColor);
+            } else if (prevBorder == border || (borderInt == iy && notPlacedPixel)) {
+                notPlacedPixel = true;
+                target->drawPixel(x-ix, y-iy, color);
+                target->drawPixel(x+ix, y-iy, color);
+                target->drawPixel(x-ix, y+iy, color);
+                target->drawPixel(x+ix, y+iy, color);
+            }
+        }
+        prevBorder = border;
+    }
+    target->endWrite();
+}
+
+void drawCircleWithAAOld(LovyanGFX *target, int32_t x, int32_t y, int32_t radius, int16_t color, int16_t outColor) {
     int32_t startX = max(0, x-radius);
     int32_t startY = max(0, y-radius);
     int32_t endX = min(target->width(), x+radius);
