@@ -8,5 +8,5 @@ void setup() {
 }
 
 void loop() {
-    M5.update()
+    M5.update();
 }
