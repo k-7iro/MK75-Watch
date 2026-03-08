@@ -108,6 +108,7 @@ uint8_t timeSyncMinute = 60;
 uint8_t modelType = 0; // 2 for Core2, 10 for CoreS3
 
 float mpu[3] = {0, 0, 0};
+float prevmpu[3] = {0, 0, 0};
 float prevGyro[5] = {0, 0, 0, 0, 0};
 
 bool wasVBUS = false;
@@ -280,10 +281,21 @@ bool checkGyro() {
   return ((sum > 700));
 }
 
-bool checkAccel() {
+bool checkAccel_sum() {
   M5.Imu.getAccel(&mpu[0], &mpu[1], &mpu[2]);
-  float sum = abs(mpu[0]) + abs(mpu[1]) + abs(mpu[2]);
-  return ((sum < 1.2) and (sum > 0.8));
+  float change = 0;
+  for (uint8_t i = 0; i < 3; i++) {
+    change += abs(mpu[i]-prevmpu[i]);
+    prevmpu[i] = mpu[i];
+  }
+  return (change < 0.05);
+}
+
+bool checkAccel_sq() {
+  // Square method, slow but better
+  M5.Imu.getAccel(&mpu[0], &mpu[1], &mpu[2]);
+  float vector = sqrt((mpu[0]*mpu[0])+(mpu[1]*mpu[1])+(mpu[2]*mpu[2]));
+  return ((vector < 1.1) and (vector > 0.9));
 }
 
 String connectWiFi(JsonDocument conf) {
@@ -665,12 +677,9 @@ void activeSleep() {
     interrupts();
     M5.update();
     if ((!charged) and (checkGyro())) break;
-    if (alarmTimer == 100) {
-      alarmTimer = 0;
-      dateTime = M5.Rtc.getDateTime();
-      if (checkAlarm() || checkTimer()) break;
-      if (checkAccel()) {
-        lowPowTimer++;
+    if (alarmTimer % 10 == 0) {
+      if (checkAccel_sum()) {
+        lowPowTimer += 1;
       } else {
         lowPowTimer = 0;
       }
@@ -681,6 +690,11 @@ void activeSleep() {
         } else lowPowSleep();
         break;
       }
+    }
+    if (alarmTimer == 100) {
+      alarmTimer = 0;
+      dateTime = M5.Rtc.getDateTime();
+      if (checkAlarm() || checkTimer()) break;
     }
     alarmTimer++;
     touch = M5.Touch.getCount();
