@@ -727,6 +727,15 @@ void beep() {
 }
 
 // Settings
+
+/* 電源設定
+
+ジャイロ起動からのスリープの時間 5s 10s 15s 30s 1m
+タッチからのスリープの時間 5s 10s 15s 30s 1m
+自動シャットダウンの時間 1m 2m 3m 5m 10m 20m 30m 60m なし
+
+*/
+
 void powerOff() { M5.Power.powerOff(); }
 
 void settings_init();
@@ -767,7 +776,7 @@ void settings_init() {
   appUI->addItem((String) "lang", settings_changeLang, (String) "Change Language");
   appUI->addLocaleToItem("lang", "ja", "言語変更");
   appUI->addItem((String) "power", nothing, (String) "Power Settings");
-  appUI->addLocaleToItem("lang", "ja", "電源設定");
+  appUI->addLocaleToItem("power", "ja", "電源設定");
   //appUI->addItem((String) "resetwifi", resetWiFi, (String) "Reset Wi-Fi");
   appUI->linkFunctionToBack(appEnd);
   appUI->makeUI(lang);
