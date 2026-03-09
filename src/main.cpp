@@ -107,9 +107,11 @@ uint8_t birthChangeID = 0;
 uint8_t timeSyncMinute = 60;
 uint8_t modelType = 0; // 2 for Core2, 10 for CoreS3
 
-float mpu[3] = {0, 0, 0};
-float prevmpu[3] = {0, 0, 0};
+float gyro[3] = {0, 0, 0};
+float accel[3] = {0, 0, 0};
+float prevAccel[3] = {0, 0, 0};
 float prevGyro[5] = {0, 0, 0, 0, 0};
+float lastchange = 0;
 
 bool wasVBUS = false;
 bool wasTouched = false;
@@ -265,37 +267,31 @@ bool writeSPIJson(String filename, JsonDocument *target) {
 
 bool checkGyro() {
   /*
-  M5.Imu.getAccel(&mpu[0], &mpu[1], &mpu[2]);
-  return ((mpu[0] > 0.95) and (abs(mpu[1]) < 0.75) and (abs(mpu[2]) < 0.75));
+  M5.Imu.getAccel(&accel[0], &accel[1], &accel[2]);
+  return ((accel[0] > 0.95) and (abs(accel[1]) < 0.75) and (abs(accel[2]) < 0.75));
   */
-  //M5.Imu.getAccel(&mpu[0], &mpu[1], &mpu[2]);
-  M5.Imu.getGyro(&mpu[0], &mpu[1], &mpu[2]);
+  //M5.Imu.getAccel(&accel[0], &accel[1], &accel[2]);
+  M5.Imu.getGyro(&gyro[0], &gyro[1], &gyro[2]);
   float sum = 0;
-  prevGyro[0] = mpu[0];
+  prevGyro[0] = gyro[0];
   for (int8_t i = 4; i >= 0; i--) {
     sum += prevGyro[i];
-    if (i != 5) {
+    if (i != 4) {
       prevGyro[i+1] = prevGyro[i];
     }
   }
   return ((sum > 700));
 }
 
-bool checkAccel_sum() {
-  M5.Imu.getAccel(&mpu[0], &mpu[1], &mpu[2]);
+bool checkAccel() {
+  M5.Imu.getAccel(&accel[0], &accel[1], &accel[2]);
   float change = 0;
   for (uint8_t i = 0; i < 3; i++) {
-    change += abs(mpu[i]-prevmpu[i]);
-    prevmpu[i] = mpu[i];
+    change += abs(accel[i]-prevAccel[i]);
+    prevAccel[i] = accel[i];
   }
+  lastchange = change;
   return (change < 0.05);
-}
-
-bool checkAccel_sq() {
-  // Square method, slow but better
-  M5.Imu.getAccel(&mpu[0], &mpu[1], &mpu[2]);
-  float vector = sqrt((mpu[0]*mpu[0])+(mpu[1]*mpu[1])+(mpu[2]*mpu[2]));
-  return ((vector < 1.1) and (vector > 0.9));
 }
 
 String connectWiFi(JsonDocument conf) {
@@ -581,7 +577,7 @@ void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, bool
     if (abs(*target-((indexes-1)*distant)) <= 1) *target = ((indexes-1)*distant);
   } else if (*target % distant != 0) {
     int8_t maxAcc = 0;
-    for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t i = 0; i < 3; i++) {
       if (prevSwipeAcc[i] < 0 and prevSwipeAcc[i] < maxAcc) {
         maxAcc = prevSwipeAcc[i];
       } else if (prevSwipeAcc[i] > 0 and prevSwipeAcc[i] > maxAcc) {
@@ -678,7 +674,7 @@ void activeSleep() {
     M5.update();
     if ((!charged) and (checkGyro())) break;
     if (alarmTimer % 10 == 0) {
-      if (checkAccel_sum()) {
+      if (checkAccel()) {
         lowPowTimer += 1;
       } else {
         lowPowTimer = 0;
@@ -1836,7 +1832,7 @@ void loopMenuTouch() {
 }
 
 void loopTimeSel() {
-  cv_timesel.pushSprite(centerX-150, centerY-55);
+  cv_timesel.pushSprite(centerX-150, centerY-60);
   if (M5.Touch.getCount() > 0) {
     m5::Touch_Class::touch_detail_t tDetail = M5.Touch.getDetail();
     if (tDetail.wasPressed() || tDetail.isHolding()) {
