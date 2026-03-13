@@ -38,12 +38,12 @@ class UI {
     void setItemColor(String id, uint32_t color);
     void setItemRightColor(String id, uint32_t color);
     void setLocaleFont(const char lang[3], uint8_t font);
-    void setSpace(int space);
     void linkFunctionToBack(pFunc func);
     void linkFunctionToItem(String id, pFunc func);
     void linkArgFunctionToItem(String id, pArgFunc func);
     void setUseArgFunctionToItem(String id, bool useArgFunction);
     void setTransparentMode(bool mode);
+    void reset();
   private:
     int scroll = 0;
     int16_t scrollAccel[3] = {0, 0, 0};
@@ -52,7 +52,7 @@ class UI {
     int firstX;
     int firstY;
     int scrollCount;
-    int space = 20;
+    const int space = 20;
     bool transparentMode = false;
     pFunc backFunction;
     std::list<String> items;
@@ -290,10 +290,6 @@ void UI::setLocaleFont(const char lang[3], uint8_t font) {
   localeFont[lang] = font;
 }
 
-void UI::setSpace(int space) {
-  this->space = space;
-}
-
 void UI::linkFunctionToBack(pFunc func) {
   backFunction = func;
 }
@@ -312,4 +308,27 @@ void UI::setUseArgFunctionToItem(String id, bool useArgFunction) {
 
 void UI::setTransparentMode(bool mode) {
   transparentMode = mode;
+}
+
+void UI::reset() {
+  scroll = 0;
+  scrollAccel[0] = 0;
+  scrollAccel[1] = 0;
+  scrollAccel[2] = 0;
+  transparentMode = false;
+  backFunction = nothing;
+  items.clear();
+  itemLocale.clear();
+  itemRightLocale.clear();
+  itemColor.clear();
+  itemRightColor.clear();
+  itemFunction.clear();
+  itemArgFunction.clear();
+  itemUseArgFunction.clear();
+  titleLocale.clear();
+  localeFont.clear();
+  disp.deleteSprite();
+  canv.deleteSprite();
+  top.deleteSprite();
+  top_dtime_bat.deleteSprite();
 }

@@ -2,7 +2,7 @@
 > [!IMPORTANT]
 > There are no stable releases in this repository, so some features may be gimmicky.
 
-This is a smartwatch/multi-function clock for M5Stack Core2/CoreS3. It does not have a heart rate monitor, but it can be integrated with various modules.
+MK75-Watch (It's called Maker Seventy-Five Watch) is a smartwatch/multi-function clock for M5Stack Core2/CoreS3. It does not have a heart rate monitor, but it can be integrated with various modules.
 
 ## Purchase Hardware
 > [!IMPORTANT]
@@ -53,7 +53,7 @@ WIP
 > [!IMPORTANT]
 > このレポジトリに安定リリースは存在していません。そのため、一部の機能がハリボテだったりします。
 
-M5Stack Core2/CoreS3用スマートウォッチ/多機能置時計です。心拍数機能などはありませんが、モジュール等で様々な連携が行えます。
+MK75-Watch（メイカーセブンティファイブウォッチと読んでください）はM5Stack Core2/CoreS3用スマートウォッチ/多機能小型置時計です。心拍数機能などはありませんが、モジュール等で様々な連携が行えます。
 
 ## ハードウェアの購入
 > [!IMPORTANT]
