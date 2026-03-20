@@ -29,6 +29,28 @@
 #include "libs/SerialFileEdit.hpp"
 #include "new"
 
+typedef enum {
+  APP_NOTHING = 0,
+  APP_ALARM = 1,
+  APP_TIMER = 2,
+  APP_STOPWATCH = 3,
+  APP_TRAIN = 4,
+  APP_EXT_DEVICE = 5,
+  APP_RANDOM = 6,
+  APP_SETTINGS = 7
+} apptype_t;
+
+typedef enum {
+  UI_NOTHING = 0,
+  UI_TIME = 1
+} uiaddtional_t;
+
+typedef enum {
+  TIMEUI_MODE_HOURMIN = 0,
+  TIMEUI_MODE_MINSEC = 1,
+  TIMEUI_MODE_DATE = 2
+} uiaddsettings_t;
+
 #define NTP_TIMEZONE "JST-9" //今後設定で変更可能にする
 #define NTP_SERVER1 "0.pool.ntp.org"
 #define NTP_SERVER2 "1.pool.ntp.org"
@@ -63,11 +85,12 @@ String header;
 SerialFileEdit SFE(&Serial, &LittleFS);
 
 char lang[3];
-String nowApp = "";
+apptype_t nowApp = APP_NOTHING;
 
-String UIAddtional = "";
-uint8_t UItimeLeft;
-uint8_t UItimeRight;
+uiaddtional_t UIAddtional = UI_NOTHING;
+uiaddsettings_t UIAddtionalSettings = TIMEUI_MODE_HOURMIN;
+int8_t UItimeLeft;
+int8_t UItimeRight;
 
 const int32_t sizeX = 320;
 const int32_t centerX = sizeX/2;
@@ -182,7 +205,7 @@ String getModel() {
 
 void appEnd() {
   if (millis() > appStart+100) {
-    if (nowApp == "stopwatch") {
+    if (nowApp == APP_STOPWATCH) {
       cv_stwt1.deleteSprite();
       cv_stwt2.deleteSprite();
       cv_stwt3.deleteSprite();
@@ -190,8 +213,8 @@ void appEnd() {
       cv_stwt5.deleteSprite();
       cv_stwt_top.deleteSprite();
     }
-    nowApp = "";
-    UIAddtional = "";
+    nowApp = APP_NOTHING;
+    UIAddtional = UI_NOTHING;
     appUI.reset();
     M5.Speaker.end();
   }
@@ -407,14 +430,19 @@ void notice(String title, String time) {
   }
 }
 
-uint8_t getMonthMaxDay(uint8_t month, uint8_t year) {
+bool isLeapYear(uint8_t year) {
+  if (year % 400 == 0) return true;
+  else if (year % 100 == 0) return false;
+  else if (year % 4 == 0) return true;
+  return false;
+}
+
+uint8_t getMonthMaxDay(uint8_t month, bool leapYear) {
   switch (month) {
     case 1: return 31;
     case 2: {
-      if (year % 400 == 0) return 29;
-      else if (year % 100 == 0) return 28;
-      else if (year % 4 == 0) return 29;
-      else return 28;
+      if (leapYear) return 29;
+      return 28;
     }
     case 3: return 31;
     case 4: return 30;
@@ -430,10 +458,19 @@ uint8_t getMonthMaxDay(uint8_t month, uint8_t year) {
   }
 }
 
+// From https://ja.wikipedia.org/wiki/%E3%83%84%E3%82%A7%E3%83%A9%E3%83%BC%E3%81%AE%E5%85%AC%E5%BC%8F
+uint8_t dateToWeekday(uint16_t y, uint8_t m, uint8_t d) {
+  if (m < 3) {
+    y--;
+    m += 12;
+  }
+  return (y + y/4 - y/100 + y/400 + (13*m + 8)/5 + d) % 7;
+}
+
 m5::rtc_datetime_t getNextDay(m5::rtc_datetime_t date) {
   m5::rtc_datetime_t result;
   result = date;
-  if (date.date.date == getMonthMaxDay(date.date.month, date.date.year)) {
+  if (date.date.date == getMonthMaxDay(date.date.month, isLeapYear(date.date.year))) {
     result.date.date = 1;
     if (date.date.month == 12) {
       result.date.month = 1;
@@ -698,7 +735,11 @@ void updateDateTimeBat() {
 
 void drawTimeUI() {
   cv_timesel.setFont(&fonts::Font8);
-  cv_timesel.drawCenterString(forceDigits(UItimeLeft, 2)+":"+forceDigits(UItimeRight, 2), 150, 43);
+  if (UIAddtionalSettings == TIMEUI_MODE_DATE) {
+    cv_timesel.drawCenterString(forceDigits(UItimeLeft, 2)+"/"+forceDigits(UItimeRight, 2), 150, 43);
+  } else {
+    cv_timesel.drawCenterString(forceDigits(UItimeLeft, 2)+":"+forceDigits(UItimeRight, 2), 150, 43);
+  }
   cv_timesel.fillRoundRect(30, 0, 100, 40, 6, TFT_LIGHTGRAY);
   cv_timesel.fillRoundRect(170, 0, 100, 40, 6, TFT_LIGHTGRAY);
   cv_timesel.fillRoundRect(30, 125, 100, 40, 6, TFT_LIGHTGRAY);
@@ -732,8 +773,15 @@ void beep() {
 void powerOff() { M5.Power.powerOff(); }
 
 void settings_init();
-void settings_changeLang();
-void settings_changeLangButton(String langTarget);
+void settings_chooseLang();
+void settings_setLang(String langTarget);
+void settings_dateTime();
+void settings_chooseTime();
+void settings_setTime();
+void settings_chooseDate();
+void settings_setDate();
+void settings_chooseYear();
+void settings_setYear(String year);
 void settings_save();
 void settings_loop();
 
@@ -745,7 +793,7 @@ bool settings_saved = true;
 
 void settings_init() {
   appStart = millis();
-  haveToDeleteAppUI = true;
+  appUI.reset();
   appUI.setTitle("Settings");
   appUI.setLocaleFont("en", 0);
   appUI.setLocaleFont("ja", 1);
@@ -763,31 +811,134 @@ void settings_init() {
   }
   //appUI.addItem((String) "lpsleep", callLowPowSleep, (String) "Low Power Sleep");
   //appUI.addItem((String) "shutdown", powerOff, (String) "Shutdown");
-  appUI.addItem((String) "synctime", syncTimeOnSettings, (String) "Sync Time");
-  appUI.addLocaleToItem("synctime", "ja", "時刻合わせ");
-  appUI.addItem((String) "lang", settings_changeLang, (String) "Change Language");
+  appUI.addItem((String) "lang", settings_chooseLang, (String) "Change Language");
   appUI.addLocaleToItem("lang", "ja", "言語変更");
   appUI.addItem((String) "power", nothing, (String) "Power Settings [WIP]");
   appUI.addLocaleToItem("power", "ja", "電源設定 [WIP]");
+  appUI.addItem((String) "time", settings_dateTime, (String) "Date and Time");
+  appUI.addLocaleToItem("time", "ja", "日付と時刻");
   //appUI.addItem((String) "resetwifi", resetWiFi, (String) "Reset Wi-Fi");
   appUI.linkFunctionToBack(appEnd);
   appUI.makeUI(lang);
 }
 
-void settings_changeLang() {
+void settings_chooseLang() {
   appStart = millis();
-  haveToDeleteAppUI = true;
+  appUI.reset();
   appUI.setTitle("Change Language");
-  appUI.addItem((String) "en", settings_changeLangButton, (String) "English");
-  appUI.addItem((String) "ja", settings_changeLangButton, (String) "Japanese");
+  appUI.addItem((String) "en", settings_setLang, (String) "English");
+  appUI.addItem((String) "ja", settings_setLang, (String) "Japanese");
   appUI.linkFunctionToBack(settings_init);
   appUI.makeUI();
 }
 
-void settings_changeLangButton(String langTarget) {
+void settings_setLang(String langTarget) {
   lang[0] = langTarget.charAt(0);
   lang[1] = langTarget.charAt(1);
   settings_saved = false;
+  settings_init();
+}
+
+void settings_dateTime() {
+  appStart = millis();
+  appUI.reset();
+  appUI.setTitle("Date and Time");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.addLocaleToTitle("ja", "日付と時刻");
+  appUI.addItem((String) "synctime", syncTimeOnSettings, (String) "Sync Time from NTP");
+  appUI.addLocaleToItem("synctime", "ja", "NTPから時刻を同期");
+  appUI.addItem((String) "year", settings_chooseYear, (String) "Year");
+  appUI.addLocaleToItem("year", "ja", "年");
+  appUI.addItem((String) "date", settings_chooseDate, (String) "Date");
+  appUI.addLocaleToItem("date", "ja", "日付");
+  appUI.addItem((String) "time", settings_chooseTime, (String) "Time");
+  appUI.addLocaleToItem("time", "ja", "時間");
+  appUI.makeUI(lang);
+}
+
+void settings_chooseYear() {
+  appUI.reset();
+  appUI.setTitle("Year Settings");
+  appUI.addLocaleToTitle("ja", "年設定");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.setTransparentMode(true);
+  appUI.linkFunctionToBack(settings_dateTime);
+  for (uint16_t i = 2020; i < 2050; i++) {
+    appUI.addItem((String) i, settings_setYear, (String) i);
+  }
+  appUI.makeUI(lang);
+}
+
+void settings_setYear(String year) {
+  UIAddtional = UI_NOTHING;
+  cv_timesel.deleteSprite();
+  m5::rtc_date_t date;
+  date.year = year.toInt();
+  date.month = dateTime.date.month;
+  date.weekDay = dateTime.date.weekDay;
+  date.date = dateTime.date.date;
+  M5.Rtc.setDate(date);
+  settings_init();
+}
+
+void settings_chooseDate() {
+  appUI.reset();
+  appUI.setTitle("Date Settings");
+  appUI.addLocaleToTitle("ja", "日付設定");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.setTransparentMode(true);
+  appUI.linkFunctionToBack(settings_setDate);
+  UIAddtional = UI_TIME;
+  UIAddtionalSettings = TIMEUI_MODE_DATE;
+  cv_timesel.createSprite(300, 165);
+  UItimeLeft = dateTime.date.month;
+  UItimeRight = dateTime.date.date;
+  M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
+  drawTimeUI();
+  appUI.makeUI(lang);
+}
+
+void settings_setDate() {
+  UIAddtional = UI_NOTHING;
+  cv_timesel.deleteSprite();
+  m5::rtc_date_t date;
+  date.year = dateTime.date.year;
+  date.month = UItimeLeft;
+  date.weekDay = dateToWeekday(dateTime.date.year, UItimeLeft, UItimeRight);
+  date.date = UItimeRight;
+  M5.Rtc.setDate(date);
+  settings_init();
+}
+
+void settings_chooseTime() {
+  appUI.reset();
+  appUI.setTitle("Time Settings");
+  appUI.addLocaleToTitle("ja", "時間設定");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.setTransparentMode(true);
+  appUI.linkFunctionToBack(settings_setTime);
+  UIAddtional = UI_TIME;
+  UIAddtionalSettings = TIMEUI_MODE_HOURMIN;
+  cv_timesel.createSprite(300, 165);
+  UItimeLeft = dateTime.time.hours;
+  UItimeRight = dateTime.time.minutes;
+  M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
+  drawTimeUI();
+  appUI.makeUI(lang);
+}
+
+void settings_setTime() {
+  UIAddtional = UI_NOTHING;
+  cv_timesel.deleteSprite();
+  m5::rtc_time_t time;
+  time.hours = UItimeLeft;
+  time.minutes = UItimeRight;
+  time.seconds = dateTime.time.seconds;
+  M5.Rtc.setTime(time);
   settings_init();
 }
 
@@ -893,7 +1044,7 @@ void alarm_config(String name) {
   appUI.addItem("weekend", alarm_switchWeekend, "Weekend");
   appUI.addLocaleToItem("weekend", "ja", "休日");
   appUI.addRightLocaleToItem("weekend", "en", boolStr(alarmJson[alarm_toConfig]["weekend"], "Enable", "Disable"));
-  appUI.addRightLocaleToItem("weekend", "ja", boolStr(alarmJson[alarm_toConfig]["weekday"], "有効", "無効"));
+  appUI.addRightLocaleToItem("weekend", "ja", boolStr(alarmJson[alarm_toConfig]["weekend"], "有効", "無効"));
   appUI.addItem("remove", alarm_remove, "Remove");
   appUI.addLocaleToItem("remove", "ja", "削除");
   appUI.linkFunctionToBack(alarm_init);
@@ -916,7 +1067,7 @@ void alarm_save() {
 }
 
 void alarm_setTime() {
-  UIAddtional = "";
+  UIAddtional = UI_NOTHING;
   alarm_saved = false;
   cv_timesel.deleteSprite();
   alarmJson[alarm_toConfig]["hour"] = UItimeLeft;
@@ -930,7 +1081,8 @@ void alarm_chooseTime() {
   appUI.setTitle("Time");
   appUI.setTransparentMode(true);
   appUI.linkFunctionToBack(alarm_setTime);
-  UIAddtional = "time";
+  UIAddtional = UI_TIME;
+  UIAddtionalSettings = TIMEUI_MODE_HOURMIN;
   cv_timesel.createSprite(300, 165);
   UItimeLeft = alarmJson[alarm_toConfig]["hour"];
   UItimeRight = alarmJson[alarm_toConfig]["min"];
@@ -1346,7 +1498,8 @@ void timer_make() {
   appUI.setLocaleFont("ja", 1);
   appUI.addLocaleToTitle("ja", "タイマーをセット");
   appUI.setTransparentMode(true);
-  UIAddtional = "time";
+  UIAddtional = UI_TIME;
+  UIAddtionalSettings = TIMEUI_MODE_MINSEC;
   cv_timesel.createSprite(300, 165);
   UItimeLeft = alarmJson[alarm_toConfig]["hour"];
   UItimeRight = alarmJson[alarm_toConfig]["min"];
@@ -1357,7 +1510,7 @@ void timer_make() {
 }
 
 void timer_start() {
-  UIAddtional = "";
+  UIAddtional = UI_NOTHING;
   cv_timesel.deleteSprite();
   uint16_t timerTime = ((UItimeLeft*60) + (UItimeRight));
   timers.push_back((timerTime*1000)+millis());
@@ -1741,7 +1894,7 @@ void setupConfigs() {
 
 void setupSprites() {
   cv_display.createSprite(sizeX, sizeY);
-  cv_clock.createSprite(220, 220);
+  cv_clock.createSprite(221, 221);
   cv_menu.createSprite(100, 240);
   makeClockBase();
   cv_dtime_bat.createSprite(sizeX, 17);
@@ -1774,11 +1927,7 @@ void loopSleep() {
   } else if (checkGyro() and (!M5.Power.Axp2101.isVBUS()) and (slpTimer > 10000)) {
     slpTimer = 10000;
   } else {
-    if (nowApp == "commander") {
-      slpTimer += (prevLoopTime / 2);
-    } else {
-      slpTimer += prevLoopTime;
-    }
+    slpTimer += prevLoopTime;
     if (slpTimer >= 15000) {
       bool charged = M5.Power.Axp2101.isVBUS();
       if (charged) {
@@ -1821,25 +1970,25 @@ void loopMenuTouch() {
             if (inLimit(tDetail.x, 225, 315) and inLimit(tDetail.y, (i*120)+75-screenSwipeVertical, (i*120)+165-screenSwipeVertical)) {
               vibTimer = 200;
               if (i == 0) {
-                nowApp = "timer";
+                nowApp = APP_TIMER;
                 timer_init();
               } else if (i == 1) {
-                nowApp = "alarm";
+                nowApp = APP_ALARM;
                 alarm_init();
               } else if (i == 2) {
-                nowApp = "stopwatch";
+                nowApp = APP_STOPWATCH;
                 stopwatch_init();
               } else if (i == 3) {
-                nowApp = "train";
+                nowApp = APP_TRAIN;
                 train_init();
               } else if (i == 4) {
-                //nowApp = "random";
+                //nowApp = APP_RANDOM;
                 //random_init();
               } else if (i == 5) {
-                nowApp = "edev";
+                nowApp = APP_EXT_DEVICE;
                 edev_init();
               } else if (i == 6) {
-                nowApp = "settings";
+                nowApp = APP_SETTINGS;
                 settings_init();
               }
             }
@@ -1854,24 +2003,46 @@ void loopMenuTouch() {
 
 void loopTimeSel() {
   cv_timesel.pushSprite(centerX-150, centerY-50);
+  int8_t UItimeLeftMax;
+  int8_t UItimeLeftMin;
+  int8_t UItimeRightMax;
+  int8_t UItimeRightMin;
+  if (UIAddtionalSettings == TIMEUI_MODE_HOURMIN) {
+    UItimeLeftMax = 23;
+    UItimeLeftMin = 0;
+    UItimeRightMax = 59;
+    UItimeRightMin = 0;
+  } else if (UIAddtionalSettings == TIMEUI_MODE_MINSEC) {
+    UItimeLeftMax = 99;
+    UItimeLeftMin = 0;
+    UItimeRightMax = 59;
+    UItimeRightMin = 0;
+  } else if (UIAddtionalSettings == TIMEUI_MODE_DATE) {
+    UItimeLeftMax = 12;
+    UItimeLeftMin = 1;
+    UItimeRightMax = getMonthMaxDay(UItimeLeft, true);
+    UItimeRightMin = 1;
+  } 
   if (M5.Touch.getCount() > 0) {
     m5::Touch_Class::touch_detail_t tDetail = M5.Touch.getDetail();
     if (tDetail.wasPressed() || tDetail.isHolding()) {
       if (inLimit(tDetail.x, 40, 140) && inLimit(tDetail.y, 50, 110)) {
         UItimeLeft++;
-        if (UItimeLeft == 24) UItimeLeft = 0;
+        if (UItimeLeft > UItimeLeftMax) UItimeLeft = UItimeLeftMin;
+        if (UIAddtionalSettings == TIMEUI_MODE_DATE and UItimeRight > UItimeRightMax) UItimeRight = UItimeRightMax;
         drawTimeUI();
       } else if (inLimit(tDetail.x, 180, 280) && inLimit(tDetail.y, 50, 110)) {
         UItimeRight++;
-        if (UItimeRight == 60) UItimeRight = 0;
+        if (UItimeRight > UItimeRightMax) UItimeRight = UItimeRightMin;
+        if (UIAddtionalSettings == TIMEUI_MODE_DATE and UItimeRight > UItimeRightMax) UItimeRight = UItimeRightMax;
         drawTimeUI();
       } else if (inLimit(tDetail.x, 40, 140) && inLimit(tDetail.y, 175, 235)) {
         UItimeLeft--;
-        if (UItimeLeft == 255) UItimeLeft = 23;
+        if (UItimeLeft < UItimeLeftMin) UItimeLeft = UItimeLeftMax;
         drawTimeUI();
       } else if (inLimit(tDetail.x, 180, 280) && inLimit(tDetail.y, 175, 235)) {
         UItimeRight--;
-        if (UItimeRight == 255) UItimeRight = 59;
+        if (UItimeRight < UItimeRightMin) UItimeRight = UItimeRightMax;
         drawTimeUI();
       }
     }
@@ -1909,7 +2080,7 @@ void loop() {
   M5.update();
   //SFE.update();
   doDraw = true;
-  if (nowApp != "commander") cv_display.clear();
+  cv_display.clear();
   bool touch = (M5.Touch.getCount() > 0);
   loopSleep();
   if (vibTimer > 0) {
@@ -1925,24 +2096,24 @@ void loop() {
   updateDateTimeBat();
   if (M5.BtnB.wasPressed()) {
     screenSwipe = 0;
-    if (nowApp != "") appEnd();
+    if (nowApp != APP_NOTHING) appEnd();
   }
   if (M5.BtnC.wasPressed()) {}
   // 時間入力
-  if (UIAddtional == "time") {
+  if (UIAddtional == UI_TIME) {
     loopTimeSel();
   }
-  if (nowApp == "settings") {
+  if (nowApp == APP_SETTINGS) {
     settings_loop();
-  } else if (nowApp == "train") {
+  } else if (nowApp == APP_TRAIN) {
     train_loop();
-  } else if (nowApp == "alarm") {
+  } else if (nowApp == APP_ALARM) {
     alarm_loop();
-  } else if (nowApp == "stopwatch") {
+  } else if (nowApp == APP_STOPWATCH) {
     stopwatch_loop();
-  } else if (nowApp == "timer") {
+  } else if (nowApp == APP_TIMER) {
     timer_loop();
-  } else if (nowApp == "edev") {
+  } else if (nowApp == APP_EXT_DEVICE) {
     edev_loop();
   } else {
     // アプリサイドバーの開閉
