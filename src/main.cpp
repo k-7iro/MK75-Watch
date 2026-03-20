@@ -459,6 +459,8 @@ uint8_t getMonthMaxDay(uint8_t month, bool leapYear) {
 }
 
 // From https://ja.wikipedia.org/wiki/%E3%83%84%E3%82%A7%E3%83%A9%E3%83%BC%E3%81%AE%E5%85%AC%E5%BC%8F
+// This function simply implements a mathematical formula directly and 
+// is therefore not subject to copyright. At least, that's what K-Nana believes.
 uint8_t dateToWeekday(uint16_t y, uint8_t m, uint8_t d) {
   if (m < 3) {
     y--;

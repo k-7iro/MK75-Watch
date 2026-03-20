@@ -46,8 +46,10 @@ WIP
 
 ## Acknowledgments
 - I used this link as a reference for setting the time: https://github.com/m5stack/M5Unified/blob/master/examples/Basic/Rtc/Rtc.ino
-- I used this link for icons not included in the images folder: https://icooon-mono.com/
-- The icons included in the images folder were generated using LMArena's AI generators, including Nano Banana (although I only use Nano Banana and Nano Banana Pro).
+- ~~I used this link for icons not included in the images folder: https://icooon-mono.com/~~
+  Currently, the icons distributed on this site are not being used.
+- The icons included in the images folder were generated using Arena.ai's AI generators, including Nano Banana (although I only use Nano Banana and Nano Banana Pro).
+- I copied some of the source code from [Wikipedia](https://ja.wikipedia.org/wiki/%E3%83%84%E3%82%A7%E3%83%A9%E3%83%BC%E3%81%AE%E5%85%AC%E5%BC%8F). This function simply implements a mathematical formula directly and is therefore not subject to copyright. At least, that's what K-Nana believes.
 
 # 日本語
 > [!IMPORTANT]
@@ -97,5 +99,7 @@ MK75-Watch（メイカーセブンティファイブウォッチと読んでく�
 
 ## 謝辞
 - 時刻合わせはこちらを参考にさせていただきました。https://github.com/m5stack/M5Unified/blob/master/examples/Basic/Rtc/Rtc.ino
-- imagesフォルダに含まれないアイコンはこちらを使用しています。https://icooon-mono.com/
-- imagesフォルダに含まれるアイコンはLMArenaでNano Bananaをはじめとする（というかNano BananaとNano Banana Proしか使ってない）生成AIにより生成されました。
+- ~~imagesフォルダに含まれないアイコンはこちらを使用しています。https://icooon-mono.com/~~
+  現状、このサイトで配布されているアイコンは使用されていません。
+- imagesフォルダに含まれるアイコンはArena.aiでNano Bananaをはじめとする（というかNano BananaとNano Banana Proしか使ってない）生成AIにより生成されました。
+- [Wikipedia](https://ja.wikipedia.org/wiki/%E3%83%84%E3%82%A7%E3%83%A9%E3%83%BC%E3%81%AE%E5%85%AC%E5%BC%8F)からソースコードの一部をコピーさせていただきました。このソースコードは数式を創意工夫なしにそのまま実装したもののため、著作権の対象にはなりません。少なくともK-Nanaはそう考えています。
