@@ -82,7 +82,7 @@ JsonDocument spDatesJson;
 std::list<long> timers;
 WiFiServer server(80);
 String header;
-SerialFileEdit SFE(&Serial, &LittleFS);
+//SerialFileEdit SFE(&Serial, &LittleFS);
 
 char lang[3];
 apptype_t nowApp = APP_NOTHING;
