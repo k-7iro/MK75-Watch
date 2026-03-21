@@ -1406,7 +1406,7 @@ void train_loop() {
       }
       String StrJson = timetable[5];
       for ( const JsonObject loopTimetable : timetable[String(dateTime.time.hours)].as<JsonArray>() ) {
-        uint8_t timetableMin = loopTimetable["m"].as<JsonObject>();
+        uint8_t timetableMin = loopTimetable["m"];
         if (timetableMin > dateTime.time.minutes) {
           String dest_buffer = loopTimetable["d"];
           String type_buffer = loopTimetable["t"];
@@ -1432,7 +1432,7 @@ void train_loop() {
       while (min[2] == 60) {
         loopHourAdd = (loopHourAdd+1)%24;
         for ( const JsonObject loopTimetable : timetable[String(dateTime.time.hours+loopHourAdd)].as<JsonArray>() ) {
-          uint8_t timetableMin = loopTimetable["m"].as<JsonObject>();
+          uint8_t timetableMin = loopTimetable["m"];
           String dest_buffer = loopTimetable["d"];
           String type_buffer = loopTimetable["t"];
           if (timetableMin < min[0] && (hourAdd[0] == -1 || hourAdd[0] == loopHourAdd)) {
