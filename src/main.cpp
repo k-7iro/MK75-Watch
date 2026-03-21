@@ -104,7 +104,7 @@ const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", 
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
 const uint32_t version = 2603001; // Two-digit year, two-digit month, three-digit build number. The build number may not match the minor update number.
-const bool devVer = false;
+const bool devVer = true;
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
 const IPAddress subnet(255, 255, 255, 0);
@@ -1406,7 +1406,7 @@ void train_loop() {
       }
       String StrJson = timetable[5];
       for ( const JsonObject loopTimetable : timetable[String(dateTime.time.hours)].as<JsonArray>() ) {
-        uint8_t timetableMin = loopTimetable["m"].as<JsonObject>();
+        uint8_t timetableMin = loopTimetable["m"];
         if (timetableMin > dateTime.time.minutes) {
           String dest_buffer = loopTimetable["d"];
           String type_buffer = loopTimetable["t"];
@@ -1432,7 +1432,7 @@ void train_loop() {
       while (min[2] == 60) {
         loopHourAdd = (loopHourAdd+1)%24;
         for ( const JsonObject loopTimetable : timetable[String(dateTime.time.hours+loopHourAdd)].as<JsonArray>() ) {
-          uint8_t timetableMin = loopTimetable["m"].as<JsonObject>();
+          uint8_t timetableMin = loopTimetable["m"];
           String dest_buffer = loopTimetable["d"];
           String type_buffer = loopTimetable["t"];
           if (timetableMin < min[0] && (hourAdd[0] == -1 || hourAdd[0] == loopHourAdd)) {

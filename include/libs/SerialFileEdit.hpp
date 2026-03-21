@@ -17,12 +17,12 @@ typedef enum {
 
 class SerialFileEdit {
   public:
-    SerialFileEdit(Stream *serial, FS *fs) : SFE_Serial(serial), SFE_System(fs) {}
+    SerialFileEdit(HardwareSerial *serial, FS *fs) : SFE_Serial(serial), SFE_System(fs) {}
     void begin(uint32_t baud = 0);
     void end(bool endSerial = true);
     void update();
   private:
-    Stream *SFE_Serial;
+    HardwareSerial *SFE_Serial;
     FS *SFE_System;
     File editFile;
     sfe_state_t state = SFE_IDLE;
@@ -30,23 +30,13 @@ class SerialFileEdit {
     std::list<String> parsed;
 };
 
-template <typename T>
-void streamBegin(T &stream, uint32_t baud) {
-  stream.begin(baud);
-}
-
-template <typename T>
-void streamEnd(T &stream) {
-  stream.end();
-}
-
 void SerialFileEdit::begin(uint32_t baud) {
-  if (baud != 0) streamBegin(SFE_Serial, baud);
+  if (baud != 0) SFE_Serial->begin(baud);
   state = SFE_CONNECTED;
 }
 
 void SerialFileEdit::end(bool endSerial) {
-  if (endSerial) streamEnd(SFE_Serial);
+  if (endSerial) SFE_Serial->end();
   if (editFile) editFile.close();
   state = SFE_IDLE;
 }
