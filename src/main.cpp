@@ -104,7 +104,7 @@ const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", 
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
 const uint32_t version = 2603001; // Two-digit year, two-digit month, three-digit build number. The build number may not match the minor update number.
-const bool devVer = false;
+const bool devVer = true;
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
 const IPAddress subnet(255, 255, 255, 0);
