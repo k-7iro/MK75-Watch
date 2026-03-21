@@ -882,7 +882,7 @@ void settings_setYear(String year) {
   m5::rtc_date_t date;
   date.year = year.toInt();
   date.month = dateTime.date.month;
-  date.weekDay = dateTime.date.weekDay;
+  date.weekDay = dateToWeekday(date.year, dateTime.date.month, dateTime.date.weekDay);
   date.date = dateTime.date.date;
   M5.Rtc.setDate(date);
   settings_init();
