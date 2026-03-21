@@ -51,7 +51,9 @@ WIP
 - The icons included in the images folder were generated using Arena.ai's AI generators, including Nano Banana (although I only use Nano Banana and Nano Banana Pro).
 - I copied some of the source code from [Wikipedia](https://ja.wikipedia.org/wiki/%E3%83%84%E3%82%A7%E3%83%A9%E3%83%BC%E3%81%AE%E5%85%AC%E5%BC%8F). This function simply implements a mathematical formula directly and is therefore not subject to copyright. At least, that's what K-Nana believes.
 
-# 日本語
+----
+
+# MK75-Watch（日本語）
 > [!IMPORTANT]
 > このレポジトリに安定リリースは存在していません。そのため、一部の機能がハリボテだったりします。
 

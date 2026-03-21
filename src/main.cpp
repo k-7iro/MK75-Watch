@@ -103,7 +103,8 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const int32_t version = 2602003;
+const uint32_t version = 2603001; // Two-digit year, two-digit month, three-digit build number. The build number may not match the minor update number.
+const bool devVer = false;
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
 const IPAddress subnet(255, 255, 255, 0);
@@ -783,6 +784,7 @@ void settings_setTime();
 void settings_chooseDate();
 void settings_setDate();
 void settings_chooseYear();
+void settings_verInfo();
 void settings_setYear(String year);
 void settings_save();
 void settings_loop();
@@ -819,6 +821,8 @@ void settings_init() {
   appUI.addLocaleToItem("power", "ja", "電源設定 [WIP]");
   appUI.addItem((String) "time", settings_dateTime, (String) "Date and Time");
   appUI.addLocaleToItem("time", "ja", "日付と時刻");
+  appUI.addItem((String) "verinfo", settings_verInfo, (String) "Version Infomation");
+  appUI.addLocaleToItem("verinfo", "ja", "バージョン情報");
   //appUI.addItem((String) "resetwifi", resetWiFi, (String) "Reset Wi-Fi");
   appUI.linkFunctionToBack(appEnd);
   appUI.makeUI(lang);
@@ -865,7 +869,6 @@ void settings_chooseYear() {
   appUI.addLocaleToTitle("ja", "年設定");
   appUI.setLocaleFont("en", 0);
   appUI.setLocaleFont("ja", 1);
-  appUI.setTransparentMode(true);
   appUI.linkFunctionToBack(settings_dateTime);
   for (uint16_t i = 2020; i < 2050; i++) {
     appUI.addItem((String) i, settings_setYear, (String) i);
@@ -956,6 +959,29 @@ void settings_save() {
     appUI.setItemRightColor("save", M5.Display.color888(0, 255, 0));
     appUI.makeUI(lang);
   }
+}
+
+void settings_verInfo() {
+  appStart = millis();
+  appUI.reset();
+  uint8_t year = version/100000;
+  uint8_t month = (version/1000)%100;
+  String baseVer = year+"."+month;
+  String buildNo = String(version%1000);
+  appUI.setTitle("Version Infomation");
+  appUI.addLocaleToTitle("ja", "バージョン情報");
+  appUI.addItem("basever", nothing, (String) "Base Version");
+  appUI.addLocaleToItem("basever", "ja", "ベースバージョン");
+  appUI.addRightLocaleToItem("basever", "en", baseVer);
+  appUI.addItem("buildno", nothing, (String) "Build Number");
+  appUI.addLocaleToItem("buildno", "ja", "ビルド番号");
+  appUI.addRightLocaleToItem("buildno", "en", buildNo);
+  appUI.addItem("devver", nothing, (String) "Developing Version");
+  appUI.addLocaleToItem("devver", "ja", "開発バージョン");
+  appUI.addRightLocaleToItem("devver", "en", boolStr(devVer, "Yes", "No"));
+  appUI.addRightLocaleToItem("devver", "ja", boolStr(devVer, "はい", "いいえ"));
+  appUI.linkFunctionToBack(settings_init);
+  appUI.makeUI(lang);
 }
 
 void settings_loop() {
