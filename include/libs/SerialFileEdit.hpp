@@ -17,12 +17,10 @@ typedef enum {
 
 class SerialFileEdit {
   public:
-    SerialFileEdit(HardwareSerial *serial, FS *fs) : SFE_Serial(serial), SFE_System(fs) {}
-    void begin(uint32_t baud = 0);
-    void end(bool endSerial = true);
+    SerialFileEdit(Stream *stream, FS *fs) : SFE_Stream(stream), SFE_System(fs) {};
     void update();
-  private:
-    HardwareSerial *SFE_Serial;
+  protected:
+    Stream *SFE_Stream;
     FS *SFE_System;
     File editFile;
     sfe_state_t state = SFE_IDLE;
@@ -30,66 +28,55 @@ class SerialFileEdit {
     std::list<String> parsed;
 };
 
-void SerialFileEdit::begin(uint32_t baud) {
-  if (baud != 0) SFE_Serial->begin(baud);
-  state = SFE_CONNECTED;
-}
-
-void SerialFileEdit::end(bool endSerial) {
-  if (endSerial) SFE_Serial->end();
-  if (editFile) editFile.close();
-  state = SFE_IDLE;
-}
-
 void SerialFileEdit::update() {
   if (state == SFE_CONNECTED) {
-    while (SFE_Serial->available()) {
-      char c = SFE_Serial->read();
+    while (SFE_Stream->available()) {
+      char c = SFE_Stream->read();
       if (c == 0x18) {
         buffer = "";
       } else if (c == 0x0a) {
         parsed = split(buffer, ' ');
-        SFE_Serial->println(buffer); // DEBUG
+        SFE_Stream->println(buffer); // DEBUG
         decltype(parsed)::iterator itr = parsed.begin();
         if (parsed.size() >= 2) {
           String cmd = *itr;
-          SFE_Serial->println(cmd); // DEBUG
+          SFE_Stream->println(cmd); // DEBUG
           itr++;
           String file = *itr;
-          SFE_Serial->println(file); // DEBUG
+          SFE_Stream->println(file); // DEBUG
           if (cmd == "ex") {
             if (SFE_System->exists(file)) {
-              SFE_Serial->print(1);
+              SFE_Stream->print(1);
             } else {
-              SFE_Serial->print(0);
+              SFE_Stream->print(0);
             }
           } else if (cmd == "md") {
             if (SFE_System->mkdir(file)) {
-              SFE_Serial->print(1);
+              SFE_Stream->print(1);
             } else {
-              SFE_Serial->print(0);
+              SFE_Stream->print(0);
             }
           } else if (cmd == "rm") {
             if (SFE_System->remove(file)) {
-              SFE_Serial->print(1);
+              SFE_Stream->print(1);
             } else {
-              SFE_Serial->print(0);
+              SFE_Stream->print(0);
             }
           } else if (cmd == "rd") {
             if (SFE_System->rmdir(file)) {
-              SFE_Serial->print(1);
+              SFE_Stream->print(1);
             } else {
-              SFE_Serial->print(0);
+              SFE_Stream->print(0);
             }
           } else if (cmd == "ls") {
             editFile = SFE_System->open(file);
             if (!editFile) {
-              SFE_Serial->print(0);
+              SFE_Stream->print(0);
             } else if (!editFile.isDirectory()) {
-              SFE_Serial->print(0);
+              SFE_Stream->print(0);
               editFile.close();
             } else {
-              SFE_Serial->println(1);
+              SFE_Stream->println(1);
               File loopFile = editFile.openNextFile();
               while (loopFile) {
                 Serial.print(loopFile.name());
@@ -102,12 +89,12 @@ void SerialFileEdit::update() {
           } else if (cmd == "re") {
             editFile = SFE_System->open(file);
             if (!editFile) {
-              SFE_Serial->print(0);
+              SFE_Stream->print(0);
             } else if (editFile.isDirectory()) {
-              SFE_Serial->print(0);
+              SFE_Stream->print(0);
               editFile.close();
             } else {
-              SFE_Serial->println(1);
+              SFE_Stream->println(1);
               while (editFile.available()) {
                 Serial.write(editFile.read());
               }
@@ -117,10 +104,10 @@ void SerialFileEdit::update() {
             editFile = SFE_System->open(file, FILE_WRITE);
             state = SFE_EDITING;
           } else {
-            SFE_Serial->print(0);
+            SFE_Stream->print(0);
           }
         } else {
-          SFE_Serial->print(0);
+          SFE_Stream->print(0);
         }
         buffer = "";
       } else if (c != 0x0d) {
@@ -128,8 +115,8 @@ void SerialFileEdit::update() {
       }
     }
   } else if (state == SFE_EDITING) {
-    while (SFE_Serial->available()) {
-      char c = SFE_Serial->read();
+    while (SFE_Stream->available()) {
+      char c = SFE_Stream->read();
       if (c == 0x18) {
         buffer.clear();
         state = SFE_CONNECTED;
@@ -140,3 +127,45 @@ void SerialFileEdit::update() {
     }
   }
 }
+
+class SFE_HWS : public SerialFileEdit {
+  public:
+    SFE_HWS(HardwareSerial *serial, FS *fs) : SerialFileEdit::SerialFileEdit(serial, fs), SFE_HWSerial(serial) {};
+    void begin(uint32_t baud = 0);
+    void end(bool endSerial = true);
+  private:
+    HardwareSerial *SFE_HWSerial;
+};
+
+void SFE_HWS::begin(uint32_t baud) {
+  if (baud != 0) SFE_HWSerial->begin(baud);
+  state = SFE_CONNECTED;
+}
+
+void SFE_HWS::end(bool endSerial) {
+  if (endSerial) SFE_HWSerial->end();
+  if (editFile) editFile.close();
+  state = SFE_IDLE;
+}
+
+#if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3
+class SFE_USB : public SerialFileEdit {
+  public:
+    SFE_USB(HWCDC *serial, FS *fs) : SerialFileEdit::SerialFileEdit(serial, fs), SFE_HWCDC(serial) {};
+    void begin(uint32_t baud = 0);
+    void end(bool endSerial = true);
+  private:
+    HWCDC *SFE_HWCDC;
+};
+
+void SFE_USB::begin(uint32_t baud) {
+  if (baud != 0) SFE_HWCDC->begin(baud);
+  state = SFE_CONNECTED;
+}
+
+void SFE_USB::end(bool endSerial) {
+  if (endSerial) SFE_HWCDC->end();
+  if (editFile) editFile.close();
+  state = SFE_IDLE;
+}
+#endif
