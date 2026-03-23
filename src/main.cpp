@@ -82,7 +82,12 @@ JsonDocument spDatesJson;
 std::list<long> timers;
 WiFiServer server(80);
 String header;
-SerialFileEdit SFE(&Serial, &LittleFS);
+
+#if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3
+SFE_USB SFE(&Serial, &LittleFS);
+#else
+SFE_HWS SFE(&Serial, &LittleFS);
+#endif
 
 char lang[3];
 apptype_t nowApp = APP_NOTHING;
