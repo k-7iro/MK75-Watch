@@ -969,10 +969,12 @@ void settings_save() {
 void settings_verInfo() {
   appStart = millis();
   appUI.reset();
-  uint8_t year = version/100000;
-  uint8_t month = (version/1000)%100;
-  String baseVer = year+"."+month;
+  uint16_t vYear = version/100000;
+  uint16_t vMonth = (version/1000)%100;
+  String baseVer = String(vYear)+"."+String(vMonth);
   String buildNo = String(version%1000);
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
   appUI.setTitle("Version Infomation");
   appUI.addLocaleToTitle("ja", "バージョン情報");
   appUI.addItem("basever", nothing, (String) "Base Version");

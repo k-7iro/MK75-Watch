@@ -3,7 +3,7 @@
 #include <LittleFS.h>
 #include "libs/SerialFileEdit.hpp"
 
-SerialFileEdit SFE(&Serial, &LittleFS);
+SFE_HWS SFE(&Serial, &LittleFS);
 
 void setup() {
   auto config = M5.config();
