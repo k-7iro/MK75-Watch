@@ -1,12 +1,7 @@
 /*
-  [ MK75-Watch Ver.2β ] by K-Nana
+  [ MK75-Watch ] by K-Nana
   Smartwatch Firmware for M5Stack Core2 / CoreS3.
   MIT License https://opensource.org/license/mit
-
-  < WARNING: Beta version >
-  This is a development version not intended for general use. 
-  Unexpected issues may occur. 
-  It is available for those who want to test new features early.
 */
 
 #include <M5Unified.h>
@@ -51,6 +46,12 @@ typedef enum {
   TIMEUI_MODE_DATE = 2
 } uiaddsettings_t;
 
+typedef enum {
+  EXT_POWER_ALWAYS = 0,
+  EXT_POWER_ACTIVE = 1,
+  EXT_POWER_NEVER = 2
+} extsettings_t;
+
 #define NTP_TIMEZONE "JST-9" //今後設定で変更可能にする
 #define NTP_SERVER1 "0.pool.ntp.org"
 #define NTP_SERVER2 "1.pool.ntp.org"
@@ -89,7 +90,6 @@ SFE_USB SFE(&Serial, &LittleFS);
 SFE_HWS SFE(&Serial, &LittleFS);
 #endif
 
-char lang[3];
 apptype_t nowApp = APP_NOTHING;
 
 uiaddtional_t UIAddtional = UI_NOTHING;
@@ -108,14 +108,14 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2603001; // Two-digit year, two-digit month, three-digit build number. The build number may not match the minor update number.
-const bool devVer = true;
+const uint32_t version = 2604000; // [version]
+
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
 const IPAddress subnet(255, 255, 255, 0);
 String M5Model;
 
-int32_t slpTimer = 10000;
+int32_t slpTimer = 0;
 int32_t vibTimer = 0;
 int32_t screenSwipe = 0;
 int32_t screenSwipeVertical = 0;
@@ -135,6 +135,12 @@ int32_t birthChangeTimer = 0;
 uint8_t birthChangeID = 0;
 uint8_t timeSyncMinute = 60;
 uint8_t modelType = 0; // 2 for Core2, 10 for CoreS3
+
+char lang[3];
+uint8_t sleepTimings[4] = {};
+uint32_t sleepTimings_sys[4] = {};
+bool doSleep[2] = {};
+extsettings_t extSettings[2] = {};
 
 float gyro[3] = {0, 0, 0};
 float accel[3] = {0, 0, 0};
@@ -366,6 +372,10 @@ String connectHTTP(String url) {
     body = "";
   }
   return body;
+}
+
+void updateExtOutput(bool active, bool charge) {
+  M5.Power.setExtOutput(extSettings[charge] == EXT_POWER_ALWAYS || (extSettings[charge] == EXT_POWER_ACTIVE && active));
 }
 
 void syncTime() {
@@ -655,7 +665,7 @@ void lowPowSleep() {
   M5.Display.setBrightness(0);
   M5.Display.sleep();
   M5.Imu.sleep();
-  M5.Power.setExtOutput(false);
+  updateExtOutput(false, charged);
   while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
     dateTime = M5.Rtc.getDateTime();
     if (checkAlarm() || checkTimer()) break;
@@ -677,19 +687,8 @@ void lowPowSleep() {
     M5.update();
     touch = M5.Touch.getCount();
   }
-  
-  M5.Power.setExtOutput(true);
+  updateExtOutput(true, M5.Power.Axp2101.isVBUS());
   M5.Imu.begin();
-}
-
-void callLowPowSleep() {
-  appEnd();
-  screenSwipe = 0;
-  lowPowSleep();
-  afterSlp = true;
-  M5.Display.wakeup();
-  M5.Display.setBrightness(63);
-  slpTimer = 10000;
 }
 
 void activeSleep() {
@@ -700,7 +699,7 @@ void activeSleep() {
   M5.Display.clear();
   M5.Display.setBrightness(0);
   M5.Display.sleep();
-  M5.Power.setExtOutput(false);
+  updateExtOutput(false, charged);
   while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
     noInterrupts();
     if (modelType == 10) {
@@ -733,7 +732,7 @@ void activeSleep() {
     alarmTimer++;
     touch = M5.Touch.getCount();
   }
-  M5.Power.setExtOutput(true);
+  updateExtOutput(true, M5.Power.Axp2101.isVBUS());
 }
 
 void updateDateTimeBat() {
@@ -789,16 +788,37 @@ void settings_setTime();
 void settings_chooseDate();
 void settings_setDate();
 void settings_chooseYear();
+void settings_powerBack();
+void settings_powerChoose();
+void settings_power(String chargeOrBattery);
+void settings_switchSleep();
+void settings_chooseExtPower();
+void settings_setExtPower(String extMode);
+void settings_chooseSleep(String touchOrGyro);
+void settings_setSleep(String slpTime);
+void settings_setAutoShutdown();
 void settings_verInfo();
 void settings_setYear(String year);
 void settings_save();
 void settings_loop();
 
 bool settings_saved = true;
+bool settings_choseBat = false;
+bool settings_choseGyro = false;
 
-// void resetWiFi() {
-//   LittleFS.remove("/wifi.json");
-// }
+String getVersionString(uint32_t ver) {
+  uint8_t vYear = ver/100000;
+  uint8_t vMonth = (ver/1000)%100;
+  uint8_t vSSDate = (ver/10)%100;
+  uint8_t vMinorUpdate = ver%10;
+  if (vSSDate == 0) {
+    if (vMinorUpdate == 0) return "V"+String(vYear)+"."+String(vMonth);
+    else return "V"+String(vYear)+"."+String(vMonth)+"."+String(vMinorUpdate);
+  } else {
+    if (vMinorUpdate == 0) return "V"+String(vYear)+"."+String(vMonth)+"-SS"+String(vSSDate);
+    else return "V"+String(vYear)+"."+String(vMonth)+"."+"-SS"+String(vSSDate)+"."+String(vMinorUpdate);
+  }
+}
 
 void settings_init() {
   appStart = millis();
@@ -818,17 +838,14 @@ void settings_init() {
     appUI.addRightLocaleToItem("save", "ja", "未保存");
     appUI.setItemRightColor("save", M5.Display.color888(255, 0, 0));
   }
-  //appUI.addItem((String) "lpsleep", callLowPowSleep, (String) "Low Power Sleep");
-  //appUI.addItem((String) "shutdown", powerOff, (String) "Shutdown");
-  appUI.addItem((String) "lang", settings_chooseLang, (String) "Change Language");
+  appUI.addItem("lang", settings_chooseLang, "Change Language");
   appUI.addLocaleToItem("lang", "ja", "言語変更");
-  appUI.addItem((String) "power", nothing, (String) "Power Settings [WIP]");
-  appUI.addLocaleToItem("power", "ja", "電源設定 [WIP]");
-  appUI.addItem((String) "time", settings_dateTime, (String) "Date and Time");
+  appUI.addItem("power", settings_powerChoose, "Power Settings");
+  appUI.addLocaleToItem("power", "ja", "電源設定");
+  appUI.addItem("time", settings_dateTime, "Date and Time");
   appUI.addLocaleToItem("time", "ja", "日付と時刻");
-  appUI.addItem((String) "verinfo", settings_verInfo, (String) "Version Infomation");
+  appUI.addItem("verinfo", settings_verInfo, "Version Infomation");
   appUI.addLocaleToItem("verinfo", "ja", "バージョン情報");
-  //appUI.addItem((String) "resetwifi", resetWiFi, (String) "Reset Wi-Fi");
   appUI.linkFunctionToBack(appEnd);
   appUI.makeUI(lang);
 }
@@ -837,8 +854,8 @@ void settings_chooseLang() {
   appStart = millis();
   appUI.reset();
   appUI.setTitle("Change Language");
-  appUI.addItem((String) "en", settings_setLang, (String) "English");
-  appUI.addItem((String) "ja", settings_setLang, (String) "Japanese");
+  appUI.addItem("en", settings_setLang, "English");
+  appUI.addItem("ja", settings_setLang, "Japanese");
   appUI.linkFunctionToBack(settings_init);
   appUI.makeUI();
 }
@@ -857,14 +874,15 @@ void settings_dateTime() {
   appUI.setLocaleFont("en", 0);
   appUI.setLocaleFont("ja", 1);
   appUI.addLocaleToTitle("ja", "日付と時刻");
-  appUI.addItem((String) "synctime", syncTimeOnSettings, (String) "Sync Time from NTP");
+  appUI.linkFunctionToBack(settings_init);
+  appUI.addItem("synctime", syncTimeOnSettings, "Sync Time from NTP");
   appUI.addLocaleToItem("synctime", "ja", "NTPから時刻を同期");
-  appUI.addItem((String) "year", settings_chooseYear, (String) "Year");
-  appUI.addLocaleToItem("year", "ja", "年");
-  appUI.addItem((String) "date", settings_chooseDate, (String) "Date");
-  appUI.addLocaleToItem("date", "ja", "日付");
-  appUI.addItem((String) "time", settings_chooseTime, (String) "Time");
-  appUI.addLocaleToItem("time", "ja", "時間");
+  appUI.addItem("year", settings_chooseYear, "Change Year");
+  appUI.addLocaleToItem("year", "ja", "年を変更");
+  appUI.addItem("date", settings_chooseDate, "Change Date");
+  appUI.addLocaleToItem("date", "ja", "日付を変更");
+  appUI.addItem("time", settings_chooseTime, "Change Time");
+  appUI.addLocaleToItem("time", "ja", "時間を変更");
   appUI.makeUI(lang);
 }
 
@@ -876,7 +894,7 @@ void settings_chooseYear() {
   appUI.setLocaleFont("ja", 1);
   appUI.linkFunctionToBack(settings_dateTime);
   for (uint16_t i = 2020; i < 2050; i++) {
-    appUI.addItem((String) i, settings_setYear, (String) i);
+    appUI.addItem(String(i), settings_setYear, (String) i);
   }
   appUI.makeUI(lang);
 }
@@ -952,41 +970,183 @@ void settings_setTime() {
   settings_init();
 }
 
+void settings_verInfo() {
+  appStart = millis();
+  appUI.reset();
+  String verStr = getVersionString(version);
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.setTitle("Version Infomation");
+  appUI.addLocaleToTitle("ja", "バージョン情報");
+  appUI.addItem("basever", nothing, "Version");
+  appUI.addLocaleToItem("basever", "ja", "バージョン");
+  appUI.addRightLocaleToItem("basever", "en", verStr);
+  appUI.linkFunctionToBack(settings_init);
+  appUI.makeUI(lang);
+}
+
+void settings_powerChoose() {
+  appStart = millis();
+  appUI.reset();
+  appUI.setTitle("Power Settings");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.addLocaleToTitle("ja", "電源設定");
+  appUI.linkFunctionToBack(settings_init);
+  appUI.addItem("charge", settings_power, "Settings when Charging");
+  appUI.addLocaleToItem("charge", "ja", "充電時の設定");
+  appUI.addItem("battery", settings_power, "Settings when Battery");
+  appUI.addLocaleToItem("battery", "ja", "バッテリー時の設定");
+  appUI.makeUI(lang);
+}
+
+void settings_power(String chargeOrBattery) {
+  if (chargeOrBattery == "charge") {
+    settings_choseBat = false;
+  } else if (chargeOrBattery == "battery") {
+    settings_choseBat = true;
+  } else {
+    settings_init();
+    return;
+  }
+  settings_powerBack();
+}
+
+void settings_powerBack() {
+  appStart = millis();
+  appUI.reset();
+  if (settings_choseBat) appUI.setTitle("Power (Bat)");
+  else appUI.setTitle("Power (Chg)");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  if (settings_choseBat) appUI.addLocaleToTitle("ja", "電源設定（電池）");
+  else appUI.addLocaleToTitle("ja", "電源設定（充電）");
+  appUI.linkFunctionToBack(settings_powerChoose);
+  appUI.addItem("sleep", settings_switchSleep, "Sleeping");
+  appUI.addLocaleToItem("sleep", "ja", "スリープ");
+  appUI.addRightLocaleToItem("sleep", "en", boolStr(doSleep[settings_choseBat], "Enable", "Disable"));
+  appUI.addRightLocaleToItem("sleep", "ja", boolStr(doSleep[settings_choseBat], "有効", "無効"));
+  if (doSleep[settings_choseBat]) appUI.addItem("touchsleep", settings_chooseSleep, "Touch sleep time");
+  else appUI.addItem("touchsleep", nothing, "Touch sleep time");
+  appUI.addLocaleToItem("touchsleep", "ja", "タッチスリープ時間");
+  appUI.addRightLocaleToItem("touchsleep", "en", boolStr(doSleep[settings_choseBat], String(sleepTimings[settings_choseBat])+"s", "N/A"));
+  appUI.addRightLocaleToItem("touchsleep", "ja", boolStr(doSleep[settings_choseBat], String(sleepTimings[settings_choseBat])+"秒", "使用不可"));
+  if (doSleep[1] and settings_choseBat) appUI.addItem("gyrosleep", settings_chooseSleep, "Gyro sleep time");
+  else appUI.addItem("gyrosleep", nothing, "Gyro sleep time");
+  appUI.addLocaleToItem("gyrosleep", "ja", "ジャイロスリープ時間");
+  appUI.addRightLocaleToItem("gyrosleep", "en", boolStr((doSleep[1] and settings_choseBat), String(sleepTimings[2+settings_choseBat])+"s", "N/A"));
+  appUI.addRightLocaleToItem("gyrosleep", "ja", boolStr((doSleep[1] and settings_choseBat), String(sleepTimings[2+settings_choseBat])+"秒", "使用不可"));
+  appUI.addItem("ext", settings_chooseExtPower, "Ext. Power supply");
+  appUI.addLocaleToItem("ext", "ja", "外部への給電");
+  if (extSettings[settings_choseBat] == EXT_POWER_ALWAYS) {
+    appUI.addRightLocaleToItem("ext", "en", "Always");
+    appUI.addRightLocaleToItem("ext", "ja", "常時");
+  } else if (extSettings[settings_choseBat] == EXT_POWER_ACTIVE) {
+    appUI.addRightLocaleToItem("ext", "en", "Only-A");
+    appUI.addRightLocaleToItem("ext", "ja", "画面点灯時");
+  } else if (extSettings[settings_choseBat] == EXT_POWER_NEVER) {
+    appUI.addRightLocaleToItem("ext", "en", "Never");
+    appUI.addRightLocaleToItem("ext", "ja", "しない");
+  }
+  appUI.makeUI(lang);
+}
+
+void settings_switchSleep() {
+  doSleep[settings_choseBat] = !doSleep[settings_choseBat];
+  appUI.addRightLocaleToItem("sleep", "en", boolStr(doSleep[settings_choseBat], "Enable", "Disable"));
+  appUI.addRightLocaleToItem("sleep", "ja", boolStr(doSleep[settings_choseBat], "有効", "無効"));
+  appUI.addRightLocaleToItem("touchsleep", "en", boolStr(doSleep[settings_choseBat], String(sleepTimings[settings_choseBat])+"s", "N/A"));
+  appUI.addRightLocaleToItem("touchsleep", "ja", boolStr(doSleep[settings_choseBat], String(sleepTimings[settings_choseBat])+"秒", "使用不可"));
+  appUI.addRightLocaleToItem("gyrosleep", "en", boolStr((doSleep[1] and settings_choseBat), String(sleepTimings[2+settings_choseBat])+"s", "N/A"));
+  appUI.addRightLocaleToItem("gyrosleep", "ja", boolStr((doSleep[1] and settings_choseBat), String(sleepTimings[2+settings_choseBat])+"秒", "使用不可"));
+  appUI.makeUI(lang);
+}
+
+void settings_chooseExtPower() {
+  appStart = millis();
+  appUI.reset();
+  if (settings_choseBat) appUI.setTitle("Ext.Power (Bat)");
+  else appUI.setTitle("Ext.Power (Chg)");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  if (settings_choseBat) appUI.addLocaleToTitle("ja", "外部への給電（電池）");
+  else appUI.addLocaleToTitle("ja", "外部への給電（充電）");
+  appUI.linkFunctionToBack(settings_powerBack);
+  appUI.addItem("A", settings_setExtPower, "Always");
+  appUI.addLocaleToItem("A", "ja", "常時");
+  appUI.addItem("O", settings_setExtPower, "Only Active");
+  appUI.addLocaleToItem("O", "ja", "画面点灯時");
+  appUI.addItem("N", settings_setExtPower, "Never");
+  appUI.addLocaleToItem("N", "ja", "しない");
+  appUI.makeUI(lang);
+}
+
+void settings_setExtPower(String extMode) {
+  if (extMode == "A") extSettings[settings_choseBat] = EXT_POWER_ALWAYS;
+  else if (extMode == "O") extSettings[settings_choseBat] = EXT_POWER_ACTIVE;
+  else if (extMode == "N") extSettings[settings_choseBat] = EXT_POWER_NEVER;
+  settings_saved = false;
+  settings_powerBack();
+}
+
+void settings_chooseSleep(String touchOrGyro) {
+  appStart = millis();
+  appUI.reset();
+  char initial;
+  if (touchOrGyro == "touchsleep") {
+    settings_choseGyro = false;
+    initial = 'T';
+  } else if (touchOrGyro == "gyrosleep") {
+    settings_choseGyro = true;
+    initial = 'G';
+  } else {
+    settings_powerBack();
+    return;
+  }
+  if (settings_choseBat) appUI.setTitle((String) initial+".Sleep Time (Bat)");
+  else appUI.setTitle((String) initial+".Sleep Time (Chg)");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  if (settings_choseBat) appUI.addLocaleToTitle("ja", (String) initial+"スリープ時間(電池)");
+  else appUI.addLocaleToTitle("ja", (String) initial+"スリープ時間(充電)");
+  appUI.linkFunctionToBack(settings_powerBack);
+  appUI.addItem("5", settings_setSleep, "5s");
+  appUI.addLocaleToItem("5", "ja", "5秒");
+  appUI.addItem("10", settings_setSleep, "10s");
+  appUI.addLocaleToItem("10", "ja", "10秒");
+  appUI.addItem("15", settings_setSleep, "15s");
+  appUI.addLocaleToItem("15", "ja", "15秒");
+  appUI.addItem("30", settings_setSleep, "30s");
+  appUI.addLocaleToItem("30", "ja", "30秒");
+  appUI.addItem("60", settings_setSleep, "60s");
+  appUI.addLocaleToItem("60", "ja", "60秒");
+  appUI.makeUI(lang);
+}
+
+void settings_setSleep(String slpTime) {
+  uint8_t slpTimeInt = slpTime.toInt();
+  sleepTimings[(settings_choseGyro*2)+settings_choseBat] = slpTimeInt;
+  sleepTimings_sys[(settings_choseGyro*2)+settings_choseBat] = 60000-(slpTimeInt*1000);
+  settings_saved = false;
+  settings_powerBack();
+}
+
 void settings_save() {
   if (!settings_saved) {
     settings_saved = true;
     Preferences pref;
     pref.begin("mk75_settings");
     pref.putString("lang", lang);
+    uint32_t slpTime = ((uint32_t) sleepTimings[0] << 24) | ((uint32_t) sleepTimings[1] << 16) | ((uint32_t) sleepTimings[2] << 8) | (uint32_t) sleepTimings[3];
+    pref.putUInt("slpTime", slpTime);
+    uint8_t slpFlags = ((uint8_t) extSettings[0] << 4) | ((uint8_t) extSettings[1] << 2) | ((uint8_t) doSleep[0] << 1) | ((uint8_t) doSleep[1]);
+    pref.putUChar("slpFlags", slpFlags);
     pref.end();
     appUI.addRightLocaleToItem("save", "en", "Saved");
     appUI.addRightLocaleToItem("save", "ja", "保存済み");
     appUI.setItemRightColor("save", M5.Display.color888(0, 255, 0));
     appUI.makeUI(lang);
   }
-}
-
-void settings_verInfo() {
-  appStart = millis();
-  appUI.reset();
-  uint8_t year = version/100000;
-  uint8_t month = (version/1000)%100;
-  String baseVer = year+"."+month;
-  String buildNo = String(version%1000);
-  appUI.setTitle("Version Infomation");
-  appUI.addLocaleToTitle("ja", "バージョン情報");
-  appUI.addItem("basever", nothing, (String) "Base Version");
-  appUI.addLocaleToItem("basever", "ja", "ベースバージョン");
-  appUI.addRightLocaleToItem("basever", "en", baseVer);
-  appUI.addItem("buildno", nothing, (String) "Build Number");
-  appUI.addLocaleToItem("buildno", "ja", "ビルド番号");
-  appUI.addRightLocaleToItem("buildno", "en", buildNo);
-  appUI.addItem("devver", nothing, (String) "Developing Version");
-  appUI.addLocaleToItem("devver", "ja", "開発バージョン");
-  appUI.addRightLocaleToItem("devver", "en", boolStr(devVer, "Yes", "No"));
-  appUI.addRightLocaleToItem("devver", "ja", boolStr(devVer, "はい", "いいえ"));
-  appUI.linkFunctionToBack(settings_init);
-  appUI.makeUI(lang);
 }
 
 void settings_loop() {
@@ -1032,7 +1192,7 @@ void alarm_init() {
   for( JsonObject loopAlarm : alarmJson.as<JsonArray>() ) {
     int32_t hour = loopAlarm["hour"];
     int32_t min = loopAlarm["min"];
-    appUI.addItem((String) cnt, alarm_config, forceDigits(hour, 2)+":"+forceDigits(min, 2));
+    appUI.addItem(String(cnt), alarm_config, forceDigits(hour, 2)+":"+forceDigits(min, 2));
     cnt++;
   }
   alarm_count = cnt;
@@ -1625,7 +1785,7 @@ void edev_init() {
       Serial.print("0x");
       Serial.print(String(i, HEX));
       Serial.println(" found");
-      appUI.addItem((String) i, nothing, "Device name");
+      appUI.addItem(String(i), nothing, "Device name");
       appUI.addRightLocaleToItem((String) i, "en", "0x"+String(i, HEX));
     } else {
       Serial.print("0x");
@@ -1798,7 +1958,8 @@ void wifiInitialSetup() {
     server.begin();
     M5.Display.setTextColor(YELLOW, TFT_BLACK);
     M5.Display.println("http://192.168.10.75/wifi-setup/");
-    M5.Display.qrcode("http://192.168.10.75/wifi-setup/", 0, sizeY-100, 100, 2);
+    M5.Display.fillRect(0, sizeY-120, 120, 120, WHITE);
+    M5.Display.qrcode("http://192.168.10.75/wifi-setup/", 10, sizeY-110, 100, 2);
     bool notSSIDReady = true;
     while (notSSIDReady) {
       WiFiClient client = server.available();
@@ -1913,9 +2074,19 @@ void setupConfigs() {
     Preferences pref;
     pref.begin("mk75_settings");
     String langStr = pref.getString("lang", "en");
+    uint32_t slpTime = pref.getUInt("slpTime", 252642565);
+    uint8_t slpFlags = pref.getUChar("slpFlags", 7);
+    pref.end();
     lang[0] = langStr.charAt(0);
     lang[1] = langStr.charAt(1);
-    pref.end();
+    for (uint8_t i = 0; i < 4; i++) {
+      sleepTimings[i] = (slpTime >> (24-(i*8))) & 0xFF;
+      sleepTimings_sys[i] = 60000-(sleepTimings[i]*1000);
+    }
+    extSettings[0] = (extsettings_t) ((slpFlags >> 4) & 0x03);
+    extSettings[1] = (extsettings_t) ((slpFlags >> 2) & 0x03);
+    doSleep[0] = (slpFlags >> 1) & 0x01;
+    doSleep[1] = (slpFlags) & 0x01;
     delay(1000);
     checkAlarm();
     M5.Display.clear();
@@ -1956,12 +2127,13 @@ void drawMenu() {
 void loopSleep() {
   bool touch = M5.Touch.getCount() > 0;
   if ((touch) or (vibTimer > 0)) {
-    slpTimer = 0;
-  } else if (checkGyro() and (!M5.Power.Axp2101.isVBUS()) and (slpTimer > 10000)) {
-    slpTimer = 10000;
+    if (M5.Power.Axp2101.isVBUS() and slpTimer > sleepTimings_sys[0]) slpTimer = sleepTimings_sys[0];
+    else if (slpTimer > sleepTimings_sys[1]) slpTimer = sleepTimings_sys[1];
+  } else if (checkGyro() and (!M5.Power.Axp2101.isVBUS()) and (slpTimer > sleepTimings_sys[3])) {
+    slpTimer = sleepTimings_sys[3];
   } else {
     slpTimer += prevLoopTime;
-    if (slpTimer >= 15000) {
+    if (slpTimer >= 60000) {
       bool charged = M5.Power.Axp2101.isVBUS();
       if (charged) {
         lowPowSleep();
@@ -1974,7 +2146,8 @@ void loopSleep() {
       afterSlp = true;
       M5.Display.wakeup();
       M5.Display.setBrightness(63);
-      slpTimer = 10000;
+      if (M5.Power.Axp2101.isVBUS()) slpTimer = sleepTimings_sys[0];
+      else slpTimer = sleepTimings_sys[1];
     }
   }
 }
@@ -2106,6 +2279,10 @@ void setup() {
   } else {
     attachInterrupt(GPIO_NUM_39, touchInterrupt, FALLING);
   }
+  bool powered = M5.Power.Axp2101.isVBUS();
+  if (powered) slpTimer = sleepTimings_sys[0];
+  else slpTimer = sleepTimings_sys[1];
+  updateExtOutput(true, powered);
 }
 
 void loop() {
@@ -2115,6 +2292,7 @@ void loop() {
   doDraw = true;
   cv_display.clear();
   bool touch = (M5.Touch.getCount() > 0);
+  bool powered = M5.Power.Axp2101.isVBUS();
   loopSleep();
   if (vibTimer > 0) {
     M5.Power.setVibration(127);
@@ -2122,8 +2300,9 @@ void loop() {
   } else {
     M5.Power.setVibration(0);
   }
-  if ((!wasVBUS) and M5.Power.Axp2101.isVBUS()) {
-    vibTimer = 200;
+  if (wasVBUS != powered) {
+    if (powered) vibTimer = 200;
+    updateExtOutput(true, powered);
   }
   wasVBUS = M5.Power.Axp2101.isVBUS();
   updateDateTimeBat();

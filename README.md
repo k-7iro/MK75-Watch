@@ -51,6 +51,14 @@ WIP
 - The icons included in the images folder were generated using Arena.ai's AI generators, including Nano Banana (although I only use Nano Banana and Nano Banana Pro).
 - I copied some of the source code from [Wikipedia](https://ja.wikipedia.org/wiki/%E3%83%84%E3%82%A7%E3%83%A9%E3%83%BC%E3%81%AE%E5%85%AC%E5%BC%8F). This function simply implements a mathematical formula directly and is therefore not subject to copyright. At least, that's what K-Nana believes.
 
+## Trademarks
+- M5Stack is a trademark of M5Stack Technology Co., Ltd.
+- Grove is a registered trademark of Seeed Technology Co., Ltd.
+- USB is a registered trademark of USB Implementers Forum.
+- I2C is a trademark of NXP Semiconductors.
+- ESP32 is a trademark of Espressif Systems.
+- Other product and company names mentioned herein may be the trademarks of their respective owners.
+
 ----
 
 # MK75-Watch（日本語）
@@ -105,3 +113,11 @@ MK75-Watch（メイカーセブンティファイブウォッチと読んでく�
   現状、このサイトで配布されているアイコンは使用されていません。
 - imagesフォルダに含まれるアイコンはArena.aiでNano Bananaをはじめとする（というかNano BananaとNano Banana Proしか使ってない）生成AIにより生成されました。
 - [Wikipedia](https://ja.wikipedia.org/wiki/%E3%83%84%E3%82%A7%E3%83%A9%E3%83%BC%E3%81%AE%E5%85%AC%E5%BC%8F)からソースコードの一部をコピーさせていただきました。このソースコードは数式を創意工夫なしにそのまま実装したもののため、著作権の対象にはなりません。少なくともK-Nanaはそう考えています。
+
+## 商標
+- M5StackはM5Stack Technology Co., Ltd.の商標です。
+- GroveはSeeed Technology Co., Ltd.の商標です。
+- USBはUSB Implementers Forumの商標です。
+- I2CはNXP Semiconductors.の商標です。
+- ESP32はEspressif Systems.の商標です。
+- 本書に記載されているその他の製品名および会社名は、それぞれの所有者の商標である場合があります。
