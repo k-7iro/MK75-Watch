@@ -108,7 +108,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2604000; // [version]
+const uint32_t version = 2604100; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
@@ -1803,39 +1803,40 @@ void edev_loop() {
 
 void makeClockBase() {
   cv_ckbase.createSprite(220, 220);
-  drawCircleWithAA(&cv_ckbase, ckCenterX, ckCenterY, 110, TFT_WHITE, TFT_BLACK);
-  drawCircleWithAA(&cv_ckbase, ckCenterX, ckCenterY, 105, TFT_BLACK, TFT_WHITE);
   float deg;
   for (int8_t i = 0; i < 12; i++) {
     deg = i*0.523;
+    cv_ckbase.setCursor((sin(deg)*90)+ckCenterX-7, (cos(deg)*90)+ckCenterY-13);
+    cv_ckbase.setFont(&fonts::Font4);
+    cv_ckbase.setTextColor(M5.Display.color565(170, 170, 170), TFT_BLACK);
+    cv_ckbase.setTextSize(1);
     if (i == 6) {
-      cv_ckbase.setCursor((sin(deg)*90)+ckCenterX-14, (cos(deg)*90)+ckCenterY-13);
-      cv_ckbase.setFont(&fonts::Font4);
-      cv_ckbase.setTextColor(TFT_WHITE, TFT_BLACK);
-      cv_ckbase.setTextSize(1);
       cv_ckbase.print("12");
     } else if (i % 3 == 0) {
-      cv_ckbase.setCursor((sin(deg)*90)+ckCenterX-7, (cos(deg)*90)+ckCenterY-13);
-      cv_ckbase.setFont(&fonts::Font4);
-      cv_ckbase.setTextColor(TFT_WHITE, TFT_BLACK);
-      cv_ckbase.setTextSize(1);
       cv_ckbase.print(12-((i+18)%12));
     } else {
-      thickLine(cv_ckbase, (sin(deg)*97)+ckCenterX, (cos(deg)*97)+ckCenterY, (sin(deg)*106)+ckCenterX, (cos(deg)*106)+ckCenterY, TFT_WHITE);
+      drawCircleWithAA(&cv_ckbase, (sin(deg)*90)+ckCenterX, (cos(deg)*90)+ckCenterY, 3, M5.Display.color565(170, 170, 170), TFT_BLACK);
     }
   }
+
   cv_ckhhand.createSprite(7, 70);
   cv_ckmhand.createSprite(5, 105);
-  cv_ckhhand.fillScreen(TFT_DARKCYAN);
-  cv_ckmhand.fillScreen(TFT_SKYBLUE);
+  cv_ckhhand.fillRect(0, 0, 7, 63, M5.Display.color565(170, 170, 170));
+  cv_ckhhand.fillRect(1, 0, 5, 64, M5.Display.color565(238, 238, 238));
+  cv_ckhhand.fillTriangle(3, 69, 0, 63, 6, 63, M5.Display.color565(170, 170, 170));
+  cv_ckhhand.fillTriangle(3, 68, 1, 64, 5, 64, M5.Display.color565(238, 238, 238));
+  cv_ckmhand.fillRect(0, 0, 5, 100, M5.Display.color565(170, 170, 170));
+  cv_ckmhand.fillRect(1, 0, 3, 101, M5.Display.color565(238, 238, 238));
+  cv_ckmhand.fillTriangle(2, 104, 0, 100, 4, 100, M5.Display.color565(170, 170, 170));
+  cv_ckmhand.fillTriangle(2, 103, 1, 101, 3, 101, M5.Display.color565(238, 238, 238));
 }
 
 void updateClock() {
   cv_ckbase.pushSprite(&cv_clock, 0, 0);
   if (M5.Power.Axp2101.isVBUS()) {
-    cv_clock.fillArc(ckCenterX, ckCenterY, 109, 108, 270, (battery*3.6)-90.5, CYAN);
+    cv_clock.fillArc(ckCenterX, ckCenterY, 51, 50, 270, (battery*3.6)-90.5, CYAN);
   } else {
-    cv_clock.fillArc(ckCenterX, ckCenterY, 109, 108, 270, (battery*3.6)-90.5, batcolor(battery));
+    cv_clock.fillArc(ckCenterX, ckCenterY, 51, 50, 270, (battery*3.6)-90.5, batcolor(battery));
   }
   cv_ckhhand.setPivot(2, 2);
   //アンチエイジングを入れても入れなくてもあまり（1フレーム当たり、80~90ms中5ms程度しか）負荷が変わらないことを確認しました
@@ -1844,7 +1845,7 @@ void updateClock() {
   cv_ckmhand.setPivot(1, 1);
   //cv_ckmhand.pushRotated(&cv_clock, (180+((dateTime.time.minutes*6)+(dateTime.time.seconds/10)))%360);
   cv_ckmhand.pushRotatedWithAA(&cv_clock, (180+((dateTime.time.minutes*6)+(dateTime.time.seconds/10)))%360);
-  cv_clock.fillCircle(ckCenterX, ckCenterY, 8, TFT_SKYBLUE);
+  cv_clock.fillCircle(ckCenterX, ckCenterY, 8, M5.Display.color565(170, 170, 170));
   cv_clock.fillCircle(ckCenterX, ckCenterY, 5, TFT_BLACK);
 }
 
