@@ -2026,7 +2026,6 @@ void updateDigitals() {
   int32_t ramFree = (int32_t) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
   int32_t ramTotal = (int32_t) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
   //cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB "+prevLoopTime+"ms/f", sizeX, 17, &fonts::Font2);
-  cv_day.drawRightString((String) M5.Power.getKeyState()+" pek", sizeX, 17, &fonts::Font2);
 }
 
 bool copySDtoSPI() {
