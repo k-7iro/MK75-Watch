@@ -1,12 +1,19 @@
 # Changelog
 Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Minor Update]`. Some months may be missing. Most updates include minor fixes that are not listed here. The versions listed below are also available from M5Burner. Other development versions are only available from GitHub.
 
+# Ver 26.4.1
+- Added a new theme, "ZeroDial," experimentally. You can revert to the traditional watch face style in the settings.
+- Fixed a bug where automatic time setting would enter an infinite loop when connecting to Wi-Fi.
+- Fixed a bug where setting the time would sometimes prevent the next alarm from sounding.
+- Fixed a bug where initial settings were not applied after Wi-Fi setup.
+- Due to various circumstances, the CoreS3 version of V26.4.1 is not available on M5Burner. Please download it from GitHub or use an older version.
+
 # Ver 26.4
 - You can now configure the sleep time and external port power output in the settings.
 - Fixed a bug where the timetable displayed incorrect times.
 - Fixed a bug where the day of the week did not change when the year was changed.
 - Improved the readability of the QR code during setup.
-- Due to various circumstances, the CoreS3 version of V26.4 will be available in the future.
+- Due to various circumstances, the CoreS3 version of V26.4 is not available on M5Burner. Please download it from GitHub or use an older version.
 
 # Ver 26.3
 - Processing speed for some graphics has increased.
@@ -34,19 +41,26 @@ Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Mi
 # 変更ログ（日本語）
 バージョン番号は`[年].[月]`または`[年].[月].[マイナーアップデート]`のように表記されます。一部の月は欠番となることがあります。ほとんどのアップデートはここに書かれていない細かなバグ修正を含みます。以下にリストアップされたバージョンはM5Burnerでも使用可能です。ほかの開発バージョンはGitHubからでのみダウンロードできます。
 
+# Ver 26.4.1
+- 試験的に新しいテーマ「ZeroDial」を追加しました。設定で従来スタイルの文字盤に戻せます。
+- 自動時刻合わせで、Wi-Fiの接続で無限ループに入ってしまうバグを修正しました。
+- 時刻設定をすると次のアラームが鳴らないことがあるバグを修正しました。
+- Wi-Fiセットアップ後に初期設定が反映されないバグを修正しました。
+- 諸事情により、V26.4.1のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+
 # Ver 26.4
 - 設定でスリープするまでの時間や外部ポートの電源出力を設定できるようになりました。
 - 時刻表で誤った時刻が表示されるバグを修正しました。
 - 年を変更しても曜日が変わらないバグを修正しました。
 - セットアップ時のQRコードの表示を読み取りやすく変更しました。
-- 諸事情により、V26.4のCoreS3バージョンは今後提供予定です。
+- 諸事情により、V26.4のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
 
 # Ver 26.3
 - 一部のグラフィックスのパフォーマンスを向上させました。
 - 動かさずに置いているときに自動シャットダウンが発生しないことがある問題を修正しました。
 - 日付と時刻を手動設定できるようにしました。手動で設定する場合、時刻は分単位まで調整可能です。秒単位の調整が必要な場合、これまで通りインターネット経由での時刻合わせを行ってください。
 - バージョン情報を設定に追加しました。
-- 諸事情により、V26.4のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードしてください。
+- 諸事情により、V26.4のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
 
 # Ver 26.2.1
 - タッチへの反応を改善しました。
