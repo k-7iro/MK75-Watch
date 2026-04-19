@@ -24,6 +24,11 @@
 #include "libs/SerialFileEdit.hpp"
 #include "new"
 
+// ======================================
+// == Application & UI Type Definitions ==
+// ======================================
+
+// アプリケーションタイプ / Application type enumeration
 typedef enum {
   APP_NOTHING = 0,
   APP_ALARM = 1,
@@ -35,27 +40,42 @@ typedef enum {
   APP_SETTINGS = 7
 } apptype_t;
 
+// UI追加機能タイプ / Additional UI type
 typedef enum {
   UI_NOTHING = 0,
   UI_TIME = 1
 } uiaddtional_t;
 
+// 時刻UI表示モード / Time display mode for UI
 typedef enum {
   TIMEUI_MODE_HOURMIN = 0,
   TIMEUI_MODE_MINSEC = 1,
   TIMEUI_MODE_DATE = 2
 } uiaddsettings_t;
 
+// 外部デバイス電源制御設定 / External device power control settings
 typedef enum {
   EXT_POWER_ALWAYS = 0,
   EXT_POWER_ACTIVE = 1,
   EXT_POWER_NEVER = 2
 } extsettings_t;
 
+// 時計盤デザインタイプ / Dial type for clock display
+typedef enum {
+  DIAL_ZERODIAL = 0,
+  DIAL_CLASSIC = 1
+} dialtype_t;
+
 #define NTP_TIMEZONE "JST-9" //今後設定で変更可能にする
-#define NTP_SERVER1 "0.pool.ntp.org"
-#define NTP_SERVER2 "1.pool.ntp.org"
-#define NTP_SERVER3 "2.pool.ntp.org"
+#define NTP_SERVER1 "ntp.nict.jp"
+#define NTP_SERVER2 "ntp.jst.mfeed.ad.jp"
+#define NTP_SERVER3 "time.google.com"
+
+// =====================================
+// ==  Canvas Buffers for Rendering  ==
+// =====================================
+// 描画用Canvas：レイヤー構造で各要素を個別に描画し、最後に合体する
+// Rendering layers: Main display, clock, menu, and component buffers
 
 static M5Canvas cv_display(&M5.Display);
 static M5Canvas cv_clock(&cv_display);
@@ -73,7 +93,13 @@ static M5Canvas cv_stwt4(&cv_display);
 static M5Canvas cv_stwt5(&cv_display);
 static M5Canvas cv_stwt_top(&cv_display);
 
-static M5Canvas cv_timesel(&M5.Display);
+static M5Canvas cv_timesel(&M5.Display); // 時刻選択UI用Canvas / Canvas for time selection UI
+
+// =====================================
+// ==     Global UI & Data Objects    ==
+// =====================================
+// UI管理、JSON設定ファイル、接続設定などのグローバル変数
+// Global UI manager, JSON documents, WiFi server, and data structures
 
 UI appUI;
 JsonDocument wifiJson;
@@ -90,12 +116,20 @@ SFE_USB SFE(&Serial, &LittleFS);
 SFE_HWS SFE(&Serial, &LittleFS);
 #endif
 
-apptype_t nowApp = APP_NOTHING;
+apptype_t nowApp = APP_NOTHING; // 現在実行中のアプリケーション / Currently active application
 
+// UI状態管理変数 / UI state management variables
 uiaddtional_t UIAddtional = UI_NOTHING;
 uiaddsettings_t UIAddtionalSettings = TIMEUI_MODE_HOURMIN;
 int8_t UItimeLeft;
 int8_t UItimeRight;
+dialtype_t dialType = DIAL_ZERODIAL;
+
+// =====================================
+// ==     Screen Layout Constants    ==
+// =====================================
+// 画面サイズと中心座標、時計中心などのレイアウト定数
+// Canvas size, center coordinates, and layout parameters
 
 const int32_t sizeX = 320;
 const int32_t centerX = sizeX/2;
@@ -108,12 +142,22 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2604100; // [version]
+const uint32_t version = 2604001; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
 const IPAddress subnet(255, 255, 255, 0);
+
+// =====================================
+// ==      Device Information         ==
+// =====================================
 String M5Model;
+
+// =====================================
+// ==  State & Timer Management Vars ==
+// =====================================
+// スリープタイマー、タッチ検出、画面スワイプなどの状態管理
+// Sleep, vibration, and screen gesture tracking variables
 
 int32_t slpTimer = 0;
 int32_t vibTimer = 0;
@@ -156,10 +200,16 @@ bool appMenu = false;
 bool touchedOnMenu = false;
 bool autoShutdown = true; // 設定可能WIP
 bool doDraw = true;
+bool axp2101 = false;
 
 uint8_t battery = M5.Power.getBatteryLevel();
-m5::rtc_datetime_t dateTime;
+m5::rtc_datetime_t dateTime; // RTC日時情報 / Real-time clock date/time
 
+// ======================================
+// ===== Utility Functions (汎用関数) =====
+// ======================================
+
+// 太い線を描画 / Draw a thicker line by overlaying multiple shifted lines
 void thickLine(M5Canvas target, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t color) {
   target.drawLine(x0, y0, x1, y1, color);
   target.drawLine(x0+1, y0, x1+1, y1, color);
@@ -168,6 +218,7 @@ void thickLine(M5Canvas target, int32_t x0, int32_t y0, int32_t x1, int32_t y1, 
   target.drawLine(x0, y0-1, x1, y1-1, color);
 }
 
+// 論理値を指定文字列に変換 / Convert boolean to specified string
 String boolStr(bool target, String ifTrue, String ifFalse) {
   if (target) {
     return ifTrue;
@@ -176,6 +227,7 @@ String boolStr(bool target, String ifTrue, String ifFalse) {
   }
 }
 
+// バッテリー残量に応じた色を計算 / Calculate color based on battery level (green->yellow->red)
 uint32_t batcolor(int32_t bat) {
   float r, g;
   if (bat <= 50) {
@@ -188,6 +240,7 @@ uint32_t batcolor(int32_t bat) {
   return M5.Display.color888((u_int8_t) r, (u_int8_t) g, 0);
 }
 
+// M5Stack デバイスモデルを英字名で取得 / Detect and return M5Stack device model name
 String getModel() {
   modelType = M5.getBoard();
   switch (modelType) {
@@ -215,6 +268,7 @@ String getModel() {
   }
 }
 
+// アプリケーション実行終了処理 / Cleanup and teardown running application
 void appEnd() {
   if (millis() > appStart+100) {
     if (nowApp == APP_STOPWATCH) {
@@ -232,7 +286,8 @@ void appEnd() {
   }
 }
 
-// Powered by ChatGPT
+// 日本の祝日判定 / Check if a given date is a Japanese holiday (powered by ChatGPT)
+// 3連休ルール対応：繰り替え休日と昭和の日のフローティング等を実装
 bool isHoliday(int32_t month, int32_t day, int32_t year, int32_t weekday) {
   if (month == 1 && day == 1) return true;
   if (month == 1 && weekday == 1 && day >= 8 && day <= 14) return true;
@@ -256,196 +311,7 @@ bool isHoliday(int32_t month, int32_t day, int32_t year, int32_t weekday) {
   return false;
 }
 
-int monthLastDay(int month, int year) {
-  if (month == 2) {
-    if (year%4 == 0 and (year%100 != 0 or year%400 == 0)) return 29;
-    else return 28;
-  } else if (month == 4 or month == 6 or month == 9 or month == 11) return 30;
-  return 31;
-}
-
-bool readSPIJson(String filename, JsonDocument *target, int32_t timeout) { // エラーコードを返す
-  JsonDocument temp;
-  File file = LittleFS.open(filename, FILE_READ);
-  if (file) {
-    DeserializationError error = deserializeJson(temp, file);
-    file.close();
-    if (error) {
-      return false;
-    }
-    *target = temp;
-    return true;
-  }
-  file.close();
-  return false;
-}
-
-bool writeSPIJson(String filename, JsonDocument *target) {
-  JsonDocument temp = *target;
-  if (LittleFS.exists(filename)) {LittleFS.remove(filename);}
-  File file = LittleFS.open(filename, FILE_WRITE);
-  if (file) {
-    serializeJson(temp, file);
-    file.close();
-    return true;
-  }
-  file.close();
-  return false;
-}
-
-bool checkGyro() {
-  /*
-  M5.Imu.getAccel(&accel[0], &accel[1], &accel[2]);
-  return ((accel[0] > 0.95) and (abs(accel[1]) < 0.75) and (abs(accel[2]) < 0.75));
-  */
-  //M5.Imu.getAccel(&accel[0], &accel[1], &accel[2]);
-  M5.Imu.getGyro(&gyro[0], &gyro[1], &gyro[2]);
-  float sum = 0;
-  prevGyro[0] = gyro[0];
-  for (int8_t i = 4; i >= 0; i--) {
-    sum += prevGyro[i];
-    if (i != 4) {
-      prevGyro[i+1] = prevGyro[i];
-    }
-  }
-  return ((sum > 700));
-}
-
-bool checkAccel() {
-  M5.Imu.getAccel(&accel[0], &accel[1], &accel[2]);
-  float change = 0;
-  for (uint8_t i = 0; i < 3; i++) {
-    change += abs(accel[i]-prevAccel[i]);
-    prevAccel[i] = accel[i];
-  }
-  lastchange = change;
-  return (change < 0.05);
-}
-
-String connectWiFi(JsonDocument conf) {
-  String bestSSID = "";
-  int8_t bestRSSI = -128;
-  if (!conf.isNull()) {
-    int32_t n = WiFi.scanNetworks();
-    for (int32_t i = 0; i < n; ++i) {
-      //Serial.println(WiFi.SSID(i));
-      if (!conf[WiFi.SSID(i)].isNull()) {
-        if (bestRSSI < WiFi.RSSI(i)) {
-          bestSSID = WiFi.SSID(i);
-          bestRSSI = WiFi.RSSI(i);
-        }
-      }
-    }
-  }
-  if (bestSSID != "") {
-    //Serial.println("Try to connect "+bestSSID+" ...");
-    String pass = conf[bestSSID];
-    WiFi.begin(bestSSID, pass);
-    return bestSSID;
-  }
-  return "";
-}
-
-bool connectWiFi() {
-  WiFi.begin();
-  int32_t timer = 0;
-  while (WiFi.status() != WL_CONNECTED and timer < 100){
-      delay(100);
-      timer++;
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    return true;
-  }
-  return false;
-}
-
-String connectHTTP(String url) {
-  WiFiClient client;
-  HTTPClient http;
-  String body;
-  if (http.begin(client, url)) {
-    //http.addHeader("Content-Type", "application/json");
-    int32_t responseCode = http.GET();
-    body = http.getString();
-    http.end();
-  } else {
-    body = "";
-  }
-  return body;
-}
-
-void updateExtOutput(bool active, bool charge) {
-  M5.Power.setExtOutput(extSettings[charge] == EXT_POWER_ALWAYS || (extSettings[charge] == EXT_POWER_ACTIVE && active));
-}
-
-void syncTime() {
-  long tmrStart = millis();
-  configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
-  // Serial.println("Synctime 1");
-  while (!(sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED or (millis()-tmrStart) > 10000)) {
-    delay(1000);
-  }
-  // Serial.println("Synctime 2");
-  time_t t = time(nullptr)+1; // Advance one second.
-  while (t > time(nullptr));  // Synchronization in seconds
-  // Serial.println("Synctime 3");
-  M5.Rtc.setDateTime(localtime(&t));
-  // Serial.println("OK!");
-}
-
-void syncTimeOnSettings() {
-  M5.Display.clear();
-  M5.Display.setCursor(0, 0);
-  M5.Display.setTextColor(WHITE, BLACK);
-  M5.Display.println("Time Sync...");
-  long wifiTimer = millis();
-  String SSID = connectWiFi(wifiJson);
-  if (SSID != "") {
-    M5.Display.println("WiFi: "+SSID);
-    while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
-      delay(1000);
-    }
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    M5.Display.println("Wi-Fi Ready");
-    syncTime();
-  } else {
-    M5.Display.println("Wi-Fi Failed");
-  }
-  dateTime = M5.Rtc.getDateTime();
-  lastSync = dateTime.date.date+(dateTime.date.month<<5);
-  WiFi.disconnect(true);
-}
-
-void notice(String title, String time) {
-  M5.Display.wakeup();
-  M5.Display.setBrightness(63);
-  M5.Display.clear();
-  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-  M5.Display.drawCenterString("Touch to Stop", sizeX/2, (sizeY/2)+50, &fonts::Font4);
-  M5.Display.drawCenterString(time, sizeX/2, sizeY/2, &fonts::Font6);
-  M5.Display.drawCenterString(title, sizeX/2, (sizeY/2)-50, &fonts::Font4);
-  M5.Speaker.begin();
-  M5.Speaker.setVolume(200);
-  uint16_t soundTimer = 2000;
-  while (true) {
-    int32_t loopTimer = millis();
-    if (soundTimer == 2000) {
-      soundTimer = 0;
-      M5.Speaker.playWav(alarm_sound);
-      M5.Power.setVibration(127);
-    } else if (soundTimer == 1000) {
-      M5.Power.setVibration(0);
-    }
-    M5.update();
-    if (M5.Touch.getCount() > 0) {
-      M5.Speaker.end();
-      return;
-    }
-    soundTimer += millis()-loopTimer;
-  }
-}
-
+// うるう年判定 / Determine if a year is a leap year (Gregorian calendar rules)
 bool isLeapYear(uint8_t year) {
   if (year % 400 == 0) return true;
   else if (year % 100 == 0) return false;
@@ -453,6 +319,7 @@ bool isLeapYear(uint8_t year) {
   return false;
 }
 
+// 指定月の最大日数を取得（うるう年対応） / Get maximum day in month (leap year aware)
 uint8_t getMonthMaxDay(uint8_t month, bool leapYear) {
   switch (month) {
     case 1: return 31;
@@ -474,9 +341,7 @@ uint8_t getMonthMaxDay(uint8_t month, bool leapYear) {
   }
 }
 
-// From https://ja.wikipedia.org/wiki/%E3%83%84%E3%82%A7%E3%83%A9%E3%83%BC%E3%81%AE%E5%85%AC%E5%BC%8F
-// This function simply implements a mathematical formula directly and 
-// is therefore not subject to copyright. At least, that's what K-Nana believes.
+// 日付から曜日を計算（ツェラーの公式） / Calculate weekday from date (Zeller's formula from Wikipedia)
 uint8_t dateToWeekday(uint16_t y, uint8_t m, uint8_t d) {
   if (m < 3) {
     y--;
@@ -485,6 +350,76 @@ uint8_t dateToWeekday(uint16_t y, uint8_t m, uint8_t d) {
   return (y + y/4 - y/100 + y/400 + (13*m + 8)/5 + d) % 7;
 }
 
+// LittleFS から JSON ファイルを読み込み / Read JSON from LittleFS file
+// Return: true=成功, false=失敗 / true=success, false=failure
+bool readSPIJson(String filename, JsonDocument *target, int32_t timeout) {
+  JsonDocument temp;
+  File file = LittleFS.open(filename, FILE_READ);
+  if (file) {
+    DeserializationError error = deserializeJson(temp, file);
+    file.close();
+    if (error) {
+      return false;
+    }
+    *target = temp;
+    return true;
+  }
+  file.close();
+  return false;
+}
+
+// JSON ファイルを LittleFS に書き込み / Write JSON to LittleFS file
+bool writeSPIJson(String filename, JsonDocument *target) {
+  JsonDocument temp = *target;
+  if (LittleFS.exists(filename)) {LittleFS.remove(filename);}
+  File file = LittleFS.open(filename, FILE_WRITE);
+  if (file) {
+    serializeJson(temp, file);
+    file.close();
+    return true;
+  }
+  file.close();
+  return false;
+}
+
+// ジャイロスコープの動きを検出（デバイス揺動判定）/ Detect gyro activity level
+bool checkGyro() {
+  // 加速度ベースの判定（現在は未使用）/ Acceleration-based check (currently unused)
+  /*
+  M5.Imu.getAccel(&accel[0], &accel[1], &accel[2]);
+  return ((accel[0] > 0.95) and (abs(accel[1]) < 0.75) and (abs(accel[2]) < 0.75));
+  */
+  // ジャイロスコープの履歴から動きの合計を計算 / Calculate gyro sum over history
+  M5.Imu.getGyro(&gyro[0], &gyro[1], &gyro[2]);
+  float sum = 0;
+  prevGyro[0] = gyro[0];
+  for (int8_t i = 4; i >= 0; i--) {
+    sum += prevGyro[i];
+    if (i != 4) {
+      prevGyro[i+1] = prevGyro[i];
+    }
+  }
+  return ((sum > 700));
+}
+
+// 加速度センサーの急激な変化を検出 / Detect significant acceleration changes
+bool checkAccel() {
+  M5.Imu.getAccel(&accel[0], &accel[1], &accel[2]);
+  float change = 0;
+  for (uint8_t i = 0; i < 3; i++) {
+    change += abs(accel[i]-prevAccel[i]);
+    prevAccel[i] = accel[i];
+  }
+  lastchange = change;
+  return (change < 0.05);
+}
+
+bool isVbus() {
+  return M5.Power.Axp2101.isVBUS();
+  // return M5.Power.getVBUSVoltage() > 4900; // 4.9V以上をUSB接続とみなす（充電中も含む）
+}
+
+// 指定日付から翌日を計算（月末日や年末変更を処理） / Calculate next calendar day
 m5::rtc_datetime_t getNextDay(m5::rtc_datetime_t date) {
   m5::rtc_datetime_t result;
   result = date;
@@ -503,6 +438,8 @@ m5::rtc_datetime_t getNextDay(m5::rtc_datetime_t date) {
   return result;
 }
 
+// RTCアラームを設定（次のアラーム発動時刻を計算し、日本時を念慮して設定） / Configure RTC alarm for next scheduled alarm
+// アラーム知慮JSONから次の発動時間を探索、翌日を計算して設定 / Complex logic: searches through all alarms, finds next matching weekday/time
 void setRTCAlarmIRQ() {
   uint32_t nowTime = (dateTime.time.hours*3600)+(dateTime.time.minutes*60)+dateTime.time.seconds;
   uint32_t nextAlarmTime = UINT_MAX;
@@ -557,6 +494,139 @@ void setRTCAlarmIRQ() {
   }
 }
 
+// WiFi 接続（設定済みSSID一覧から最強電波を選択）/ Connect WiFi to strongest configured SSID
+String connectWiFi(JsonDocument conf) {
+  String bestSSID = "";
+  int8_t bestRSSI = -128;
+  if (!conf.isNull()) {
+    int32_t n = WiFi.scanNetworks();
+    for (int32_t i = 0; i < n; ++i) {
+      //Serial.println(WiFi.SSID(i));
+      if (!conf[WiFi.SSID(i)].isNull()) {
+        if (bestRSSI < WiFi.RSSI(i)) {
+          bestSSID = WiFi.SSID(i);
+          bestRSSI = WiFi.RSSI(i);
+        }
+      }
+    }
+  }
+  if (bestSSID != "") {
+    //Serial.println("Try to connect "+bestSSID+" ...");
+    String pass = conf[bestSSID];
+    WiFi.begin(bestSSID, pass);
+    return bestSSID;
+  }
+  return "";
+}
+
+// WiFi 接続（デフォルト資格情報）/ Connect WiFi with default credentials
+bool connectWiFi() {
+  WiFi.begin();
+  int32_t timer = 0;
+  while (WiFi.status() != WL_CONNECTED and timer < 100){
+      delay(100);
+      timer++;
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    return true;
+  }
+  return false;
+}
+
+// HTTP GET リクエストを実行してレスポンスボディを返す / Perform HTTP GET request and return response
+String connectHTTP(String url) {
+  WiFiClient client;
+  HTTPClient http;
+  String body;
+  if (http.begin(client, url)) {
+    //http.addHeader("Content-Type", "application/json");
+    int32_t responseCode = http.GET();
+    body = http.getString();
+    http.end();
+  } else {
+    body = "";
+  }
+  return body;
+}
+
+// 外部出力ポートの制御（常時ON/アクティブ時ON/常時OFF）/ Control external output port based on settings
+void updateExtOutput(bool active, bool charge) {
+  M5.Power.setExtOutput(extSettings[charge] == EXT_POWER_ALWAYS || (extSettings[charge] == EXT_POWER_ACTIVE && active));
+}
+
+// NTP サーバーと同期して RTC 時刻を更新 / Sync RTC with NTP server
+void syncTime() {
+  long tmrStart = millis();
+  configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
+  // Serial.println("Synctime 1");
+  while (!(sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED or (millis()-tmrStart) > 10000)) {
+    delay(1000);
+  }
+  // Serial.println("Synctime 2");
+  time_t t = time(nullptr)+1; // Advance one second.
+  while (t > time(nullptr));  // Synchronization in seconds
+  // Serial.println("Synctime 3");
+  M5.Rtc.setDateTime(localtime(&t));
+  setRTCAlarmIRQ();
+  // Serial.println("OK!");
+}
+
+// 設定メニュー内で時刻同期を実行 / Sync time from settings menu (with visual feedback)
+void syncTimeOnSettings() {
+  M5.Display.clear();
+  M5.Display.setCursor(0, 0);
+  M5.Display.setTextColor(WHITE, BLACK);
+  M5.Display.println("Time Sync...");
+  long wifiTimer = millis();
+  String SSID = connectWiFi(wifiJson);
+  if (SSID != "") {
+    M5.Display.println("WiFi: "+SSID);
+    while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
+      delay(1000);
+    }
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    M5.Display.println("Wi-Fi Ready");
+    syncTime();
+  } else {
+    M5.Display.println("Wi-Fi Failed");
+  }
+  dateTime = M5.Rtc.getDateTime();
+  lastSync = dateTime.date.date+(dateTime.date.month<<5);
+  WiFi.disconnect(true);
+}
+
+// アラーム/スピード速報を試播と操作で試播を実行 / Display notice with sound and vibration
+void notice(String title, String time) {
+  M5.Display.wakeup();
+  M5.Display.setBrightness(63);
+  M5.Display.clear();
+  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  M5.Display.drawCenterString("Touch to Stop", sizeX/2, (sizeY/2)+50, &fonts::Font4);
+  M5.Display.drawCenterString(time, sizeX/2, sizeY/2, &fonts::Font6);
+  M5.Display.drawCenterString(title, sizeX/2, (sizeY/2)-50, &fonts::Font4);
+  M5.Speaker.begin();
+  M5.Speaker.setVolume(200);
+  uint16_t soundTimer = 2000;
+  while (true) {
+    int32_t loopTimer = millis();
+    if (soundTimer == 2000) {
+      soundTimer = 0;
+      M5.Speaker.playWav(alarm_sound);
+      M5.Power.setVibration(127);
+    } else if (soundTimer == 1000) {
+      M5.Power.setVibration(0);
+    }
+    M5.update();
+    if (M5.Touch.getCount() > 0) {
+      M5.Speaker.end();
+      return;
+    }
+    soundTimer += millis()-loopTimer;
+  }
+}
+
+// 現在時刻で発動対象のアラームを確認して発動を実行 / Check if any alarm matches current time and trigger if needed
 bool checkAlarm() {
   if (dateTime.time.minutes != lastAlarmMin) {
     lastAlarmMin = 60;
@@ -578,6 +648,7 @@ bool checkAlarm() {
   return false;
 }
 
+// タイマー一覧から消却時を査訪し、発動を確認して発動を実行 / Check and trigger expired timers
 bool checkTimer() {
   for(auto i = timers.begin(); i != timers.end(); i++) {
     if (*i <= millis()) {
@@ -589,6 +660,7 @@ bool checkTimer() {
   return false;
 }
 
+// Touch scroll processing - calculates position delta from touch movement
 void scrollsWhenTouch(m5::touch_detail_t detail, int32_t* target, bool vertical = false) {
   int32_t now;
   int32_t prev;
@@ -614,6 +686,7 @@ void scrollsWhenTouch(m5::touch_detail_t detail, int32_t* target, bool vertical 
   }
 }
 
+// Inertial scroll animation with boundary snapping - decelerates scrolling
 void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, bool useAcc = true) {
   if (*target < 0) {
     *target += (0-*target)/2;
@@ -641,13 +714,14 @@ void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, bool
   prevTY = -1;
 }
 
+// Connect WiFi and sync time from NTP server
 void connectWiFiAndTimeSync() {
   M5.Power.setLed(255);
   long wifiTimer = millis();
   String SSID = connectWiFi(wifiJson);
   if (SSID != "") {
-    while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
-      delay(1000);
+    while (WiFi.status() != WL_CONNECTED && (millis()-wifiTimer) < 10000) {
+      delay(100);
     }
   }
   if (WiFi.status() == WL_CONNECTED) {
@@ -658,15 +732,16 @@ void connectWiFiAndTimeSync() {
   M5.Power.setLed(0);
 }
 
+// Deep sleep mode - maintains minimal power while monitoring for wake events
 void lowPowSleep() {
   uint8_t touch = 0;
-  bool charged = M5.Power.Axp2101.isVBUS();
+  bool charged = isVbus();
   M5.Display.clear();
   M5.Display.setBrightness(0);
   M5.Display.sleep();
   M5.Imu.sleep();
   updateExtOutput(false, charged);
-  while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
+  while (!((touch > 0) or (charged != isVbus()))) {
     dateTime = M5.Rtc.getDateTime();
     if (checkAlarm() || checkTimer()) break;
     if (dateTime.time.hours == timeSyncHour and lastSync != dateTime.date.date+(dateTime.date.month*32)) {
@@ -687,7 +762,7 @@ void lowPowSleep() {
     M5.update();
     touch = M5.Touch.getCount();
   }
-  updateExtOutput(true, M5.Power.Axp2101.isVBUS());
+  updateExtOutput(true, isVbus());
   M5.Imu.begin();
 }
 
@@ -695,12 +770,12 @@ void activeSleep() {
   uint8_t touch = 0;
   uint8_t alarmTimer = 0;
   uint16_t lowPowTimer = 0;
-  bool charged = M5.Power.Axp2101.isVBUS();
+  bool charged = isVbus();
   M5.Display.clear();
   M5.Display.setBrightness(0);
   M5.Display.sleep();
   updateExtOutput(false, charged);
-  while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
+  while (!((touch > 0) or (charged != isVbus()))) {
     noInterrupts();
     if (modelType == 10) {
       esp_sleep_enable_ext0_wakeup(GPIO_NUM_21, false);
@@ -731,15 +806,19 @@ void activeSleep() {
     }
     alarmTimer++;
     touch = M5.Touch.getCount();
+    //delay(10);
+    //if (M5.Power.getKeyState() != 0) break; 電源ボタンでの復帰はスリープ時間を入れないと反応しないが、スリープを長くすると消費電力も多くなる
   }
-  updateExtOutput(true, M5.Power.Axp2101.isVBUS());
+  updateExtOutput(true, isVbus());
 }
 
+// Update current date, time, and battery level from RTC and power manager
 void updateDateTimeBat() {
   dateTime = M5.Rtc.getDateTime();
   battery = M5.Power.getBatteryLevel();
 }
 
+// Draw time/date selection UI with up/down arrow buttons
 void drawTimeUI() {
   cv_timesel.setFont(&fonts::Font8);
   if (UIAddtionalSettings == TIMEUI_MODE_DATE) {
@@ -761,8 +840,59 @@ void drawTimeUI() {
   cv_timesel.fillTriangle(220, 155, 180, 135, 260, 135, TFT_WHITE);
 }
 
-// Some Apps
+// Prepare clock face graphics (dial, hour hand, minute hand) with selected style
+void makeClockBase() {
+  uint16_t col0; //Dial color
+  uint16_t col1; //分針の色
+  uint16_t col2; //時針の色
+  cv_ckbase.clear(TFT_BLACK);
+  cv_ckhhand.clear(TFT_BLACK);
+  cv_ckmhand.clear(TFT_BLACK);
+  if (dialType == DIAL_CLASSIC) {
+    col0 = TFT_WHITE;
+    col1 = TFT_SKYBLUE;
+    col2 = TFT_DARKCYAN;
+    drawCircleWithAA(&cv_ckbase, ckCenterX, ckCenterY, 110, TFT_WHITE, TFT_BLACK);
+    drawCircleWithAA(&cv_ckbase, ckCenterX, ckCenterY, 105, TFT_BLACK, TFT_WHITE);
+  } else {
+    col0 = M5.Display.color565(170, 170, 170);
+    col1 = M5.Display.color565(170, 170, 170);
+    col2 = M5.Display.color565(170, 170, 170);
+  }
+  float deg;
+  for (int8_t i = 0; i < 12; i++) {
+    deg = i*0.523;
+    cv_ckbase.setCursor((sin(deg)*90)+ckCenterX-7, (cos(deg)*90)+ckCenterY-13);
+    cv_ckbase.setFont(&fonts::Font4);
+    cv_ckbase.setTextColor(col0, TFT_BLACK);
+    cv_ckbase.setTextSize(1);
+    if (i == 6) {
+      cv_ckbase.print("12");
+    } else if (i % 3 == 0) {
+      cv_ckbase.print(12-((i+18)%12));
+    } else if (dialType == DIAL_ZERODIAL) {
+      drawCircleWithAA(&cv_ckbase, (sin(deg)*90)+ckCenterX, (cos(deg)*90)+ckCenterY, 3, col0, TFT_BLACK);
+    } else {
+      thickLine(cv_ckbase, (sin(deg)*97)+ckCenterX, (cos(deg)*97)+ckCenterY, (sin(deg)*106)+ckCenterX, (cos(deg)*106)+ckCenterY, col0);
+    }
+  }
+  cv_ckhhand.fillRect(0, 0, 7, 63, col2);
+  cv_ckhhand.fillTriangle(3, 69, 0, 63, 6, 63, col2);
+  cv_ckmhand.fillRect(0, 0, 5, 100, col1);
+  cv_ckmhand.fillTriangle(2, 104, 0, 100, 4, 100, col1);
+  if (dialType == DIAL_ZERODIAL) {
+    cv_ckhhand.fillRect(1, 0, 5, 65, M5.Display.color565(238, 238, 238));
+    cv_ckhhand.fillTriangle(3, 68, 1, 64, 5, 64, M5.Display.color565(238, 238, 238));
+    cv_ckmhand.fillRect(1, 0, 3, 102, M5.Display.color565(238, 238, 238));
+    cv_ckmhand.fillTriangle(2, 103, 1, 101, 3, 101, M5.Display.color565(238, 238, 238));
+  }
+}
 
+// ======================================
+// ===== Application Functions (アプリ関数) =====
+// ======================================
+
+// Play a simple beep tone (440 Hz, 500ms)
 void beep() {
   M5.Speaker.tone(440, 500);
 }
@@ -797,6 +927,8 @@ void settings_setExtPower(String extMode);
 void settings_chooseSleep(String touchOrGyro);
 void settings_setSleep(String slpTime);
 void settings_setAutoShutdown();
+void settings_style();
+void settings_setStyle(String style);
 void settings_verInfo();
 void settings_setYear(String year);
 void settings_save();
@@ -846,6 +978,14 @@ void settings_init() {
   appUI.addLocaleToItem("time", "ja", "日付と時刻");
   appUI.addItem("verinfo", settings_verInfo, "Version Infomation");
   appUI.addLocaleToItem("verinfo", "ja", "バージョン情報");
+  appUI.addItem("style", settings_style, "Dial Style");
+  appUI.addLocaleToItem("style", "ja", "文字盤のスタイル");
+  if (dialType == DIAL_CLASSIC) {
+    appUI.addRightLocaleToItem("style", "en", "Classic");
+    appUI.addRightLocaleToItem("style", "ja", "クラシック");
+  } else {
+    appUI.addRightLocaleToItem("style", "en", "ZeroDial");
+  }
   appUI.linkFunctionToBack(appEnd);
   appUI.makeUI(lang);
 }
@@ -908,6 +1048,7 @@ void settings_setYear(String year) {
   date.weekDay = dateToWeekday(date.year, dateTime.date.month, dateTime.date.weekDay);
   date.date = dateTime.date.date;
   M5.Rtc.setDate(date);
+  setRTCAlarmIRQ();
   settings_init();
 }
 
@@ -938,6 +1079,7 @@ void settings_setDate() {
   date.weekDay = dateToWeekday(dateTime.date.year, UItimeLeft, UItimeRight);
   date.date = UItimeRight;
   M5.Rtc.setDate(date);
+  setRTCAlarmIRQ();
   settings_init();
 }
 
@@ -967,6 +1109,32 @@ void settings_setTime() {
   time.minutes = UItimeRight;
   time.seconds = dateTime.time.seconds;
   M5.Rtc.setTime(time);
+  setRTCAlarmIRQ();
+  settings_init();
+}
+
+void settings_style() {
+  appStart = millis();
+  appUI.reset();
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.setTitle("style");
+  appUI.addLocaleToTitle("ja", "スタイル");
+  appUI.addItem("classic", settings_setStyle, "Classic");
+  appUI.addLocaleToItem("classic", "ja", "クラシック");
+  appUI.addItem("zerodial", settings_setStyle, "ZeroDial");
+  appUI.linkFunctionToBack(settings_init);
+  appUI.makeUI(lang);
+}
+
+void settings_setStyle(String style) {
+  settings_saved = false;
+  if (style == "classic") {
+    dialType = DIAL_CLASSIC;
+  } else {
+    dialType = DIAL_ZERODIAL;
+  }
+  makeClockBase();
   settings_init();
 }
 
@@ -1141,6 +1309,7 @@ void settings_save() {
     pref.putUInt("slpTime", slpTime);
     uint8_t slpFlags = ((uint8_t) extSettings[0] << 4) | ((uint8_t) extSettings[1] << 2) | ((uint8_t) doSleep[0] << 1) | ((uint8_t) doSleep[1]);
     pref.putUChar("slpFlags", slpFlags);
+    pref.putUChar("dialType", dialType);
     pref.end();
     appUI.addRightLocaleToItem("save", "en", "Saved");
     appUI.addRightLocaleToItem("save", "ja", "保存済み");
@@ -1384,7 +1553,7 @@ void stopwatch_loop() {
   cv_dtime_bat.clear(TFT_BLACK);
   cv_dtime_bat.setTextColor(TFT_WHITE, TFT_BLACK);
   cv_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
-  if (M5.Power.Axp2101.isVBUS()) { cv_dtime_bat.setTextColor(CYAN, TFT_BLACK); }
+  if (isVbus()) { cv_dtime_bat.setTextColor(CYAN, TFT_BLACK); }
   cv_dtime_bat.drawRightString(String(battery)+"%", sizeX, 0, &fonts::Font2);
   cv_dtime_bat.pushSprite(0, 0);
   cv_stwt_top.pushSprite(0, 17);
@@ -1801,42 +1970,16 @@ void edev_loop() {
   appUI.update(dateTime, battery);
 }
 
-void makeClockBase() {
-  cv_ckbase.createSprite(220, 220);
-  float deg;
-  for (int8_t i = 0; i < 12; i++) {
-    deg = i*0.523;
-    cv_ckbase.setCursor((sin(deg)*90)+ckCenterX-7, (cos(deg)*90)+ckCenterY-13);
-    cv_ckbase.setFont(&fonts::Font4);
-    cv_ckbase.setTextColor(M5.Display.color565(170, 170, 170), TFT_BLACK);
-    cv_ckbase.setTextSize(1);
-    if (i == 6) {
-      cv_ckbase.print("12");
-    } else if (i % 3 == 0) {
-      cv_ckbase.print(12-((i+18)%12));
-    } else {
-      drawCircleWithAA(&cv_ckbase, (sin(deg)*90)+ckCenterX, (cos(deg)*90)+ckCenterY, 3, M5.Display.color565(170, 170, 170), TFT_BLACK);
-    }
-  }
-
-  cv_ckhhand.createSprite(7, 70);
-  cv_ckmhand.createSprite(5, 105);
-  cv_ckhhand.fillRect(0, 0, 7, 63, M5.Display.color565(170, 170, 170));
-  cv_ckhhand.fillRect(1, 0, 5, 64, M5.Display.color565(238, 238, 238));
-  cv_ckhhand.fillTriangle(3, 69, 0, 63, 6, 63, M5.Display.color565(170, 170, 170));
-  cv_ckhhand.fillTriangle(3, 68, 1, 64, 5, 64, M5.Display.color565(238, 238, 238));
-  cv_ckmhand.fillRect(0, 0, 5, 100, M5.Display.color565(170, 170, 170));
-  cv_ckmhand.fillRect(1, 0, 3, 101, M5.Display.color565(238, 238, 238));
-  cv_ckmhand.fillTriangle(2, 104, 0, 100, 4, 100, M5.Display.color565(170, 170, 170));
-  cv_ckmhand.fillTriangle(2, 103, 1, 101, 3, 101, M5.Display.color565(238, 238, 238));
-}
-
+// Draw analog clock face with battery ring and rotating hour/minute hands
 void updateClock() {
   cv_ckbase.pushSprite(&cv_clock, 0, 0);
-  if (M5.Power.Axp2101.isVBUS()) {
-    cv_clock.fillArc(ckCenterX, ckCenterY, 51, 50, 270, (battery*3.6)-90.5, CYAN);
+  uint8_t arcSize;
+  if (dialType == DIAL_ZERODIAL) arcSize = 20;
+  else arcSize = 108;
+  if (isVbus()) {
+    cv_clock.fillArc(ckCenterX, ckCenterY, arcSize+1, arcSize, 270, (battery*3.6)-90.5, CYAN);
   } else {
-    cv_clock.fillArc(ckCenterX, ckCenterY, 51, 50, 270, (battery*3.6)-90.5, batcolor(battery));
+    cv_clock.fillArc(ckCenterX, ckCenterY, arcSize+1, arcSize, 270, (battery*3.6)-90.5, batcolor(battery));
   }
   cv_ckhhand.setPivot(2, 2);
   //アンチエイジングを入れても入れなくてもあまり（1フレーム当たり、80~90ms中5ms程度しか）負荷が変わらないことを確認しました
@@ -1849,11 +1992,12 @@ void updateClock() {
   cv_clock.fillCircle(ckCenterX, ckCenterY, 5, TFT_BLACK);
 }
 
+// Update digital time display (HH:MM:SS), battery indicator, and special date info
 void updateDigitals() {
   cv_dtime_bat.clear();
   cv_dtime_bat.setTextColor(TFT_WHITE, TFT_BLACK);
   cv_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
-  if (M5.Power.Axp2101.isVBUS()) { cv_dtime_bat.setTextColor(CYAN, TFT_BLACK); }
+  if (isVbus()) { cv_dtime_bat.setTextColor(CYAN, TFT_BLACK); }
   cv_dtime_bat.drawRightString(String(battery)+"%", sizeX, 0, &fonts::Font2);
   cv_day.clear();
   uint8_t dateY;
@@ -1881,7 +2025,8 @@ void updateDigitals() {
   cv_day.drawString(String(dateTime.date.month)+"/"+String(dateTime.date.date)+" "+week[dateTime.date.weekDay]+" "+dateTime.date.year, 0, dateY, &fonts::Font2);
   int32_t ramFree = (int32_t) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
   int32_t ramTotal = (int32_t) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
-  cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB "+prevLoopTime+"ms/f", sizeX, 17, &fonts::Font2);
+  //cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB "+prevLoopTime+"ms/f", sizeX, 17, &fonts::Font2);
+  cv_day.drawRightString((String) M5.Power.getKeyState()+" pek", sizeX, 17, &fonts::Font2);
 }
 
 bool copySDtoSPI() {
@@ -2034,6 +2179,12 @@ void wifiInitialSetup() {
   syncTime();
   M5.Display.println("Finished.");
   WiFi.disconnect(true);
+  String langStr = "en";
+  uint32_t slpTime = 252642565;
+  uint8_t slpFlags = 7;
+  dialType = (dialtype_t) 0;
+  lang[0] = langStr.charAt(0);
+  lang[1] = langStr.charAt(1);
   delay(1000);
 }
 
@@ -2077,6 +2228,7 @@ void setupConfigs() {
     String langStr = pref.getString("lang", "en");
     uint32_t slpTime = pref.getUInt("slpTime", 252642565);
     uint8_t slpFlags = pref.getUChar("slpFlags", 7);
+    dialType = (dialtype_t) pref.getUChar("dialType", 0);
     pref.end();
     lang[0] = langStr.charAt(0);
     lang[1] = langStr.charAt(1);
@@ -2101,11 +2253,15 @@ void setupSprites() {
   cv_display.createSprite(sizeX, sizeY);
   cv_clock.createSprite(221, 221);
   cv_menu.createSprite(100, 240);
+  cv_ckbase.createSprite(220, 220);
+  cv_ckhhand.createSprite(7, 70);
+  cv_ckmhand.createSprite(5, 105);
   makeClockBase();
   cv_dtime_bat.createSprite(sizeX, 17);
   cv_day.createSprite(sizeX, 34);
 }
 
+// Draw application menu with app icons and names (vertical scrollable list)
 void drawMenu() {
   cv_menu.clear();
   for (int8_t i = 0; i < howManyApps; i++) {
@@ -2128,33 +2284,36 @@ void drawMenu() {
 void loopSleep() {
   bool touch = M5.Touch.getCount() > 0;
   if ((touch) or (vibTimer > 0)) {
-    if (M5.Power.Axp2101.isVBUS() and slpTimer > sleepTimings_sys[0]) slpTimer = sleepTimings_sys[0];
+    if (isVbus() and slpTimer > sleepTimings_sys[0]) slpTimer = sleepTimings_sys[0];
     else if (slpTimer > sleepTimings_sys[1]) slpTimer = sleepTimings_sys[1];
-  } else if (checkGyro() and (!M5.Power.Axp2101.isVBUS()) and (slpTimer > sleepTimings_sys[3])) {
+  } else if (checkGyro() and (!isVbus()) and (slpTimer > sleepTimings_sys[3])) {
     slpTimer = sleepTimings_sys[3];
   } else {
     slpTimer += prevLoopTime;
     if (slpTimer >= 60000) {
-      bool charged = M5.Power.Axp2101.isVBUS();
+      bool charged = isVbus();
       if (charged) {
         lowPowSleep();
       } else {
         activeSleep();
       }
-      if (M5.Power.Axp2101.isVBUS() and !charged) {
+      if (isVbus() and !charged) {
         vibTimer = 500;
       }
       afterSlp = true;
       M5.Display.wakeup();
       M5.Display.setBrightness(63);
-      if (M5.Power.Axp2101.isVBUS()) slpTimer = sleepTimings_sys[0];
+      if (isVbus()) slpTimer = sleepTimings_sys[0];
       else slpTimer = sleepTimings_sys[1];
     }
   }
 }
 
-// 割り込み関係で動かなくなったら IRAM_ATTR
+// ======================================
+// ===== Main Loop Functions (メインループ処理) =====
+// ======================================
 
+// Handle menu swipe gestures and app selection
 void loopMenuTouch() {
   if (!afterSlp) {
     if (M5.Touch.getCount() > 0) {
@@ -2208,6 +2367,7 @@ void loopMenuTouch() {
   }
 }
 
+// Handle time/date picker button input for HH:MM, MM:SS, or MM/DD modes
 void loopTimeSel() {
   cv_timesel.pushSprite(centerX-150, centerY-50);
   int8_t UItimeLeftMax;
@@ -2256,10 +2416,16 @@ void loopTimeSel() {
   }
 }
 
+// ISR callback - signal to skip drawing in current loop cycle
 void touchInterrupt() {
   doDraw = false;
 }
 
+// ======================================
+// ===== Arduino Setup & Main Loop ======
+// ======================================
+
+// Initialize hardware, load settings, prepare sprites and display
 void setup() {
   auto cfg = M5.config();
   cfg.internal_imu = true;
@@ -2274,18 +2440,19 @@ void setup() {
   setupConfigs();
   setupSprites();
   //setupMenu();
-  wasVBUS = M5.Power.Axp2101.isVBUS();
+  wasVBUS = isVbus();
   if (modelType == 10) {
     attachInterrupt(GPIO_NUM_21, touchInterrupt, FALLING);
   } else {
     attachInterrupt(GPIO_NUM_39, touchInterrupt, FALLING);
   }
-  bool powered = M5.Power.Axp2101.isVBUS();
+  bool powered = isVbus();
   if (powered) slpTimer = sleepTimings_sys[0];
   else slpTimer = sleepTimings_sys[1];
   updateExtOutput(true, powered);
 }
 
+// Main event loop - handles display updates, touch input, app logic, and power management
 void loop() {
   int32_t tmrStart = millis();
   M5.update();
@@ -2293,7 +2460,7 @@ void loop() {
   doDraw = true;
   cv_display.clear();
   bool touch = (M5.Touch.getCount() > 0);
-  bool powered = M5.Power.Axp2101.isVBUS();
+  bool powered = isVbus();
   loopSleep();
   if (vibTimer > 0) {
     M5.Power.setVibration(127);
@@ -2305,7 +2472,7 @@ void loop() {
     if (powered) vibTimer = 200;
     updateExtOutput(true, powered);
   }
-  wasVBUS = M5.Power.Axp2101.isVBUS();
+  wasVBUS = isVbus();
   updateDateTimeBat();
   if (M5.BtnB.wasPressed()) {
     screenSwipe = 0;
