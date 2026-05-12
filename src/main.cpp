@@ -66,7 +66,7 @@ typedef enum {
   DIAL_CLASSIC = 1
 } dialtype_t;
 
-#define NTP_TIMEZONE "JST-9" //今後設定で変更可能にする
+#define NTP_TIMEZONE "JST-9" // 日本標準時 / Japan Standard Time (UTC+9) in seconds
 #define NTP_SERVER1 "ntp.nict.jp"
 #define NTP_SERVER2 "ntp.jst.mfeed.ad.jp"
 #define NTP_SERVER3 "time.google.com"
@@ -81,6 +81,7 @@ static M5Canvas cv_display(&M5.Display);
 static M5Canvas cv_clock(&cv_display);
 static M5Canvas cv_menu(&cv_display);
 static M5Canvas cv_ckbase(&cv_display);
+static M5Canvas cv_ckbase_digit(&cv_ckbase);
 static M5Canvas cv_dtime_bat(&cv_display);
 static M5Canvas cv_day(&cv_clock);
 static M5Canvas cv_ckhhand(&cv_clock);
@@ -142,7 +143,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2604001; // [version]
+const uint32_t version = 2605120; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
@@ -175,10 +176,12 @@ int32_t appStart = 0;
 int32_t checkAlarmTimer = 0;
 uint8_t lastAlarmMin = 60;
 uint16_t lastSync = 0;
-int32_t birthChangeTimer = 0;
+int64_t birthChangeTimer = 0;
 uint8_t birthChangeID = 0;
 uint8_t timeSyncMinute = 60;
 uint8_t modelType = 0; // 2 for Core2, 10 for CoreS3
+uint32_t latestVer = 0;
+uint8_t backLight = 64;
 
 char lang[3];
 uint8_t sleepTimings[4] = {};
@@ -556,10 +559,16 @@ void updateExtOutput(bool active, bool charge) {
 
 // NTP サーバーと同期して RTC 時刻を更新 / Sync RTC with NTP server
 void syncTime() {
-  long tmrStart = millis();
+  latestVer = connectHTTP("https://k-7iro.github.io/mk75watch/version.txt").toInt();
+  if (latestVer > version) {
+    Preferences pref;
+    pref.begin("mk75_settings");
+    pref.putUInt("latestVer", latestVer);
+    pref.end();
+  }
   configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
   // Serial.println("Synctime 1");
-  while (!(sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED or (millis()-tmrStart) > 10000)) {
+  while (!(sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED)) {
     delay(1000);
   }
   // Serial.println("Synctime 2");
@@ -581,7 +590,7 @@ void syncTimeOnSettings() {
   String SSID = connectWiFi(wifiJson);
   if (SSID != "") {
     M5.Display.println("WiFi: "+SSID);
-    while (!(WiFi.status() == WL_CONNECTED and (millis()-wifiTimer) < 10000)) {
+    while (!(WiFi.status() == WL_CONNECTED or (millis()-wifiTimer) > 10000)) {
       delay(1000);
     }
   }
@@ -720,7 +729,7 @@ void connectWiFiAndTimeSync() {
   long wifiTimer = millis();
   String SSID = connectWiFi(wifiJson);
   if (SSID != "") {
-    while (WiFi.status() != WL_CONNECTED && (millis()-wifiTimer) < 10000) {
+    while (!(WiFi.status() == WL_CONNECTED or (millis()-wifiTimer) > 10000)) {
       delay(100);
     }
   }
@@ -784,6 +793,7 @@ void activeSleep() {
     } else M5.Power.lightSleep(100000);
     interrupts();
     M5.update();
+    if (M5.BtnPWR.getState() == m5::Button_Class::state_clicked) break;
     if ((!charged) and (checkGyro())) break;
     if (alarmTimer % 10 == 0) {
       if (checkAccel()) {
@@ -806,8 +816,6 @@ void activeSleep() {
     }
     alarmTimer++;
     touch = M5.Touch.getCount();
-    //delay(10);
-    //if (M5.Power.getKeyState() != 0) break; 電源ボタンでの復帰はスリープ時間を入れないと反応しないが、スリープを長くすると消費電力も多くなる
   }
   updateExtOutput(true, isVbus());
 }
@@ -845,6 +853,9 @@ void makeClockBase() {
   uint16_t col0; //Dial color
   uint16_t col1; //分針の色
   uint16_t col2; //時針の色
+  uint16_t col3; //目盛の色
+  uint16_t col4; //目盛の色
+  cv_ckbase_digit.createSprite(221, 221);
   cv_ckbase.clear(TFT_BLACK);
   cv_ckhhand.clear(TFT_BLACK);
   cv_ckmhand.clear(TFT_BLACK);
@@ -858,24 +869,30 @@ void makeClockBase() {
     col0 = M5.Display.color565(170, 170, 170);
     col1 = M5.Display.color565(170, 170, 170);
     col2 = M5.Display.color565(170, 170, 170);
+    col3 = M5.Display.color565(100, 100, 100);
+    col4 = M5.Display.color565(20, 20, 20);
+    for (int8_t i = 0; i < 60; i++) {
+      cv_ckbase.drawGradientLine((sin(i*0.105)*98)+ckCenterX, (cos(i*0.105)*98)+ckCenterY, (sin(i*0.105)*104)+ckCenterX, (cos(i*0.105)*104)+ckCenterY, col4, col3);
+    }
   }
   float deg;
   for (int8_t i = 0; i < 12; i++) {
     deg = i*0.523;
-    cv_ckbase.setCursor((sin(deg)*90)+ckCenterX-7, (cos(deg)*90)+ckCenterY-13);
-    cv_ckbase.setFont(&fonts::Font4);
-    cv_ckbase.setTextColor(col0, TFT_BLACK);
-    cv_ckbase.setTextSize(1);
+    cv_ckbase_digit.setFont(&fonts::Font4);
+    cv_ckbase_digit.setTextColor(col0, TFT_BLACK);
+    cv_ckbase_digit.setTextSize(1);
     if (i == 6) {
-      cv_ckbase.print("12");
+      cv_ckbase_digit.drawCenterString("12", (sin(deg)*90)+ckCenterX, (cos(deg)*90)+ckCenterY-10);
     } else if (i % 3 == 0) {
-      cv_ckbase.print(12-((i+18)%12));
+      cv_ckbase_digit.drawCenterString(String(12-((i+6)%12)), (sin(deg)*90)+ckCenterX, (cos(deg)*90)+ckCenterY-10);
     } else if (dialType == DIAL_ZERODIAL) {
       drawCircleWithAA(&cv_ckbase, (sin(deg)*90)+ckCenterX, (cos(deg)*90)+ckCenterY, 3, col0, TFT_BLACK);
     } else {
       thickLine(cv_ckbase, (sin(deg)*97)+ckCenterX, (cos(deg)*97)+ckCenterY, (sin(deg)*106)+ckCenterX, (cos(deg)*106)+ckCenterY, col0);
     }
   }
+  cv_ckbase_digit.pushSprite(0, 0, TFT_BLACK);
+  cv_ckbase_digit.deleteSprite();
   cv_ckhhand.fillRect(0, 0, 7, 63, col2);
   cv_ckhhand.fillTriangle(3, 69, 0, 63, 6, 63, col2);
   cv_ckmhand.fillRect(0, 0, 5, 100, col1);
@@ -929,7 +946,7 @@ void settings_setSleep(String slpTime);
 void settings_setAutoShutdown();
 void settings_style();
 void settings_setStyle(String style);
-void settings_verInfo();
+void settings_info();
 void settings_setYear(String year);
 void settings_save();
 void settings_loop();
@@ -976,8 +993,8 @@ void settings_init() {
   appUI.addLocaleToItem("power", "ja", "電源設定");
   appUI.addItem("time", settings_dateTime, "Date and Time");
   appUI.addLocaleToItem("time", "ja", "日付と時刻");
-  appUI.addItem("verinfo", settings_verInfo, "Version Infomation");
-  appUI.addLocaleToItem("verinfo", "ja", "バージョン情報");
+  appUI.addItem("verinfo", settings_info, "Infomation");
+  appUI.addLocaleToItem("verinfo", "ja", "情報");
   appUI.addItem("style", settings_style, "Dial Style");
   appUI.addLocaleToItem("style", "ja", "文字盤のスタイル");
   if (dialType == DIAL_CLASSIC) {
@@ -1138,17 +1155,43 @@ void settings_setStyle(String style) {
   settings_init();
 }
 
-void settings_verInfo() {
+void settings_info() {
   appStart = millis();
   appUI.reset();
   String verStr = getVersionString(version);
   appUI.setLocaleFont("en", 0);
   appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("Version Infomation");
-  appUI.addLocaleToTitle("ja", "バージョン情報");
+  appUI.setTitle("Infomation");
+  appUI.addLocaleToTitle("ja", "情報");
   appUI.addItem("basever", nothing, "Version");
   appUI.addLocaleToItem("basever", "ja", "バージョン");
   appUI.addRightLocaleToItem("basever", "en", verStr);
+  appUI.addItem("model", nothing, "Model");
+  appUI.addLocaleToItem("model", "ja", "モデル");
+  appUI.addRightLocaleToItem("model", "en", getModel());
+  appUI.addItem("pmic", nothing, "Power Management IC");
+  appUI.addLocaleToItem("pmic", "ja", "電源管理IC");
+  if (M5.Power.getType() == m5::Power_Class::pmic_axp192) {
+    appUI.addRightLocaleToItem("pmic", "en", "AXP192");
+  } else if (M5.Power.getType() == m5::Power_Class::pmic_axp2101) {
+    appUI.addRightLocaleToItem("pmic", "en", "AXP2101");
+  } else {
+    appUI.addRightLocaleToItem("pmic", "en", "Unknown");
+    appUI.addRightLocaleToItem("pmic", "ja", "不明");
+  }
+  appUI.addItem("imu", nothing, "IMU");
+  appUI.addLocaleToItem("imu", "ja", "IMU");
+  if (M5.Imu.getType() == m5::imu_mpu6886) {
+    appUI.addRightLocaleToItem("imu", "en", "MPU6886");
+  } else if (M5.Imu.getType() == m5::imu_bmi270) {
+    appUI.addRightLocaleToItem("imu", "en", "BMI270");
+  } else if (M5.Imu.getType() == m5::imu_none) {
+    appUI.addRightLocaleToItem("imu", "en", "None");
+    appUI.addRightLocaleToItem("imu", "ja", "なし");
+  } else {
+    appUI.addRightLocaleToItem("imu", "en", "Unknown");
+    appUI.addRightLocaleToItem("imu", "ja", "不明");
+  }
   appUI.linkFunctionToBack(settings_init);
   appUI.makeUI(lang);
 }
@@ -1998,33 +2041,51 @@ void updateDigitals() {
   cv_dtime_bat.setTextColor(TFT_WHITE, TFT_BLACK);
   cv_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
   if (isVbus()) { cv_dtime_bat.setTextColor(CYAN, TFT_BLACK); }
-  cv_dtime_bat.drawRightString(String(battery)+"%", sizeX, 0, &fonts::Font2);
+  cv_dtime_bat.drawRightString(String(battery)+"% - "+String((float) M5.Power.getBatteryVoltage()/1000)+"V", sizeX, 0, &fonts::Font2);
   cv_day.clear();
   uint8_t dateY;
+  bool newVerAvailable = (latestVer > version);
   if (!spDatesJson[String(dateTime.date.month)].isNull()) {
     if (!spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)].isNull()) {
       dateY = 0;
+      uint8_t birthdayCount = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)].size();
       if (birthChangeTimer+5000 < millis()) {
         birthChangeTimer = millis();
         birthChangeID++;
-        if (birthChangeID >= spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)].size()) {
+        if (birthChangeID >= birthdayCount+newVerAvailable) {
           birthChangeID = 0;
         }
       }
-      int32_t dayColor = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color"];
-      cv_day.setTextColor(M5.Display.color24to16(dayColor), TFT_BLACK);
-      String dayName = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["name"];
+      if (birthChangeID == birthdayCount) {
+        cv_day.setTextColor(TFT_RED, TFT_BLACK);
+        String dayName = "Update Available: "+getVersionString(latestVer);
+        cv_day.drawString(dayName, 0, 17, &fonts::Font2);
+      } else {
+        int32_t dayColor = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color"];
+        cv_day.setTextColor(M5.Display.color24to16(dayColor), TFT_BLACK);
+        String dayName = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["name"];
+        cv_day.drawString(dayName, 0, 17, &fonts::Font2);
+      }
+    } else if (newVerAvailable) {
+      dateY = 0;
+      cv_day.setTextColor(TFT_RED, TFT_BLACK);
+      String dayName = "Update Available: "+getVersionString(latestVer);
       cv_day.drawString(dayName, 0, 17, &fonts::Font2);
     } else {
       dateY = 17;
     }
+  } else if (newVerAvailable) {
+    dateY = 0;
+    cv_day.setTextColor(TFT_RED, TFT_BLACK);
+    String dayName = "Update Available: "+getVersionString(latestVer);
+    cv_day.drawString(dayName, 0, 17, &fonts::Font2);
   } else {
     dateY = 17;
   }
   cv_day.setTextColor(TFT_WHITE, TFT_BLACK);
   cv_day.drawString(String(dateTime.date.month)+"/"+String(dateTime.date.date)+" "+week[dateTime.date.weekDay]+" "+dateTime.date.year, 0, dateY, &fonts::Font2);
-  int32_t ramFree = (int32_t) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
-  int32_t ramTotal = (int32_t) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
+  //int32_t ramFree = (int32_t) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
+  //int32_t ramTotal = (int32_t) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
   //cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB "+prevLoopTime+"ms/f", sizeX, 17, &fonts::Font2);
 }
 
@@ -2227,6 +2288,7 @@ void setupConfigs() {
     String langStr = pref.getString("lang", "en");
     uint32_t slpTime = pref.getUInt("slpTime", 252642565);
     uint8_t slpFlags = pref.getUChar("slpFlags", 7);
+    latestVer = pref.getUInt("latestVer", version);
     dialType = (dialtype_t) pref.getUChar("dialType", 0);
     pref.end();
     lang[0] = langStr.charAt(0);
@@ -2252,7 +2314,7 @@ void setupSprites() {
   cv_display.createSprite(sizeX, sizeY);
   cv_clock.createSprite(221, 221);
   cv_menu.createSprite(100, 240);
-  cv_ckbase.createSprite(220, 220);
+  cv_ckbase.createSprite(221, 221);
   cv_ckhhand.createSprite(7, 70);
   cv_ckmhand.createSprite(5, 105);
   makeClockBase();
@@ -2289,7 +2351,7 @@ void loopSleep() {
     slpTimer = sleepTimings_sys[3];
   } else {
     slpTimer += prevLoopTime;
-    if (slpTimer >= 60000) {
+    if (slpTimer >= 60000 || M5.BtnPWR.getState() == m5::Button_Class::state_clicked) {
       bool charged = isVbus();
       if (charged) {
         lowPowSleep();
