@@ -143,7 +143,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2605120; // [version]
+const uint32_t version = 2605220; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
@@ -176,12 +176,14 @@ int32_t appStart = 0;
 int32_t checkAlarmTimer = 0;
 uint8_t lastAlarmMin = 60;
 uint16_t lastSync = 0;
-int64_t birthChangeTimer = 0;
+uint64_t birthChangeTimer = 0;
 uint8_t birthChangeID = 0;
 uint8_t timeSyncMinute = 60;
 uint8_t modelType = 0; // 2 for Core2, 10 for CoreS3
 uint32_t latestVer = 0;
 uint8_t backLight = 64;
+uint16_t shutdownTimer = 0;
+uint64_t mainLoopTimer = 0;
 
 char lang[3];
 uint8_t sleepTimings[4] = {};
@@ -420,6 +422,16 @@ bool checkAccel() {
 bool isVbus() {
   return M5.Power.Axp2101.isVBUS();
   // return M5.Power.getVBUSVoltage() > 4900; // 4.9V以上をUSB接続とみなす（充電中も含む）
+}
+
+void lightSleep(uint32_t duration) {
+  noInterrupts();
+  if (modelType == 10) {
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_21, false);
+    esp_sleep_enable_timer_wakeup(duration);
+    esp_light_sleep_start();
+  } else M5.Power.lightSleep(duration);
+  interrupts();
 }
 
 // 指定日付から翌日を計算（月末日や年末変更を処理） / Calculate next calendar day
@@ -761,13 +773,7 @@ void lowPowSleep() {
         lastSync = dateTime.date.date+(dateTime.date.month<<5);
       }
     }
-    noInterrupts();
-    if (modelType == 10) {
-      esp_sleep_enable_ext0_wakeup(GPIO_NUM_21, false);
-      esp_sleep_enable_timer_wakeup(10000000);
-      esp_light_sleep_start();
-    } else M5.Power.lightSleep(10000000);
-    interrupts();
+    lightSleep(10000000);
     M5.update();
     touch = M5.Touch.getCount();
   }
@@ -785,13 +791,7 @@ void activeSleep() {
   M5.Display.sleep();
   updateExtOutput(false, charged);
   while (!((touch > 0) or (charged != isVbus()))) {
-    noInterrupts();
-    if (modelType == 10) {
-      esp_sleep_enable_ext0_wakeup(GPIO_NUM_21, false);
-      esp_sleep_enable_timer_wakeup(100000);
-      esp_light_sleep_start();
-    } else M5.Power.lightSleep(100000);
-    interrupts();
+    lightSleep(100000);
     M5.update();
     if (M5.BtnPWR.getState() == m5::Button_Class::state_clicked) break;
     if ((!charged) and (checkGyro())) break;
@@ -2515,14 +2515,27 @@ void setup() {
 
 // Main event loop - handles display updates, touch input, app logic, and power management
 void loop() {
-  int32_t tmrStart = millis();
   M5.update();
   //SFE.update();
   doDraw = true;
   cv_display.clear();
   bool touch = (M5.Touch.getCount() > 0);
   bool powered = isVbus();
-  loopSleep();
+  if (doSleep[powered]) {
+    loopSleep();
+  } else {
+    if (autoShutdown && timers.size() == 0) {
+      if (checkAccel()) {
+        shutdownTimer += 1;
+      } else {
+        shutdownTimer = 0;
+      }
+      if (shutdownTimer == 600) {
+        connectWiFiAndTimeSync();
+        M5.Power.powerOff();
+      }
+    }
+  }
   if (vibTimer > 0) {
     M5.Power.setVibration(127);
     vibTimer -= prevLoopTime;
@@ -2567,7 +2580,7 @@ void loop() {
         // 目標値0
         screenSwipe = floor(screenSwipe/2);
     }
-    if (doDraw) updateClock();
+    if (doDraw && dateTime.time.seconds % 10 == 0) updateClock();
     if (doDraw) cv_clock.pushSprite(&cv_display, centerX-ckCenterX-round(screenSwipe/2), centerY-ckCenterY, TFT_BLACK);
     if (doDraw) updateDigitals();
     if (doDraw) cv_day.pushSprite(&cv_display, 1, sizeY-34, TFT_BLACK);
@@ -2577,6 +2590,10 @@ void loop() {
       if (doDraw) cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
     }
     if (doDraw) cv_display.pushSprite(0, 0);
+    if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && !touch) {
+      lightSleep(min((int) (1000000-(micros()-mainLoopTimer)), 0));
+    }
+    mainLoopTimer = micros();
   }
   if (checkAlarmTimer > 10000) {
     checkAlarmTimer = 0;
@@ -2587,7 +2604,5 @@ void loop() {
   }
   if (afterSlp) {
     afterSlp = false;
-  } else {
-    prevLoopTime = millis()-tmrStart;
   }
 }
