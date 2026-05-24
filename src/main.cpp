@@ -2481,7 +2481,7 @@ void loopTimeSel() {
 }
 
 // ISR callback - signal to skip drawing in current loop cycle
-void touchInterrupt() {
+IRAM_ATTR void touchInterrupt() {
   doDraw = false;
 }
 
@@ -2596,7 +2596,6 @@ void loop() {
       if (doDraw) cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
     }
     if (doDraw) cv_display.pushSprite(0, 0);
-    Serial.println(1000000-(micros()-mainLoopTimer));
     if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && !touch) {
       int64_t slpTime = 1000000-(micros()-mainLoopTimer);
       if (vibTimer > millis()) {
