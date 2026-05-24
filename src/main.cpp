@@ -177,11 +177,14 @@ int32_t checkAlarmTimer = 0;
 uint8_t lastAlarmMin = 60;
 uint16_t lastSync = 0;
 uint64_t birthChangeTimer = 0;
+uint64_t birthChangeTimer = 0;
 uint8_t birthChangeID = 0;
 uint8_t timeSyncMinute = 60;
 uint8_t modelType = 0; // 2 for Core2, 10 for CoreS3
 uint32_t latestVer = 0;
 uint8_t backLight = 64;
+uint16_t shutdownTimer = 0;
+uint64_t mainLoopTimer = 0;
 uint16_t shutdownTimer = 0;
 uint64_t mainLoopTimer = 0;
 
@@ -2585,7 +2588,7 @@ void loop() {
         // 目標値0
         screenSwipe = floor(screenSwipe/2);
     }
-    if (doDraw) updateClock();
+    if (doDraw && dateTime.time.seconds % 10 == 0) updateClock();
     if (doDraw) cv_clock.pushSprite(&cv_display, centerX-ckCenterX-round(screenSwipe/2), centerY-ckCenterY, TFT_BLACK);
     if (doDraw) updateDigitals();
     if (doDraw) cv_day.pushSprite(&cv_display, 1, sizeY-34, TFT_BLACK);
@@ -2623,7 +2626,5 @@ void loop() {
   }
   if (afterSlp) {
     afterSlp = false;
-  } else {
-    prevLoopTime = millis()-tmrStart;
   }
 }
