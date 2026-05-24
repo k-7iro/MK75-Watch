@@ -54,6 +54,7 @@ class UI {
     int scrollCount;
     const int space = 20;
     bool transparentMode = false;
+    uint8_t firstTouch = 3;
     pFunc backFunction;
     std::list<String> items;
     std::map<String, std::map<String, String>> itemLocale;
@@ -147,72 +148,78 @@ void UI::makeUI(const char lang[3]) {
 }
 
 void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery) {
-  uint8_t rowSize = (space*2)+26;
-  uint16_t height = M5.Display.height();
-  uint16_t width = M5.Display.width();
-  uint16_t cHeight = canv.height();
-  uint8_t tHeight = top.height();
-  uint8_t tdHeight = top_dtime_bat.height();
-  top_dtime_bat.clear(BLACK);
-  top_dtime_bat.setTextColor(WHITE, BLACK);
-  top_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
-  if (M5.Power.Axp2101.isVBUS()) { top_dtime_bat.setTextColor(CYAN, BLACK); }
-  top_dtime_bat.drawRightString(String(battery)+"%", width, 0, &fonts::Font2);
-  top_dtime_bat.pushSprite(0, 0);
-  canv.pushSprite(0, tHeight-scroll);
-  top.pushSprite(0, 0);
-  disp.pushSprite(0, 0, M5.Lcd.color565(16, 8, 16));
-  if (M5.BtnA.wasPressed()) {
-    backFunction();
-  } else if (M5.Touch.getCount() > 0) {
-    auto detail = M5.Touch.getDetail();
-    if (detail.y < 240) {
-      if (firstX == -1) {
-        firstX = detail.x;
-        firstY = detail.y;
-      }
-      uint8_t accelArrSize = (sizeof(scrollAccel)/sizeof(int16_t));
-      if (prevY != -1) {
-        for (int i = 0; i < accelArrSize-1; i++) {
-          scrollAccel[i] = scrollAccel[i+1];
+  if (firstTouch == 0) {
+    uint8_t rowSize = (space*2)+26;
+    uint16_t height = M5.Display.height();
+    uint16_t width = M5.Display.width();
+    uint16_t cHeight = canv.height();
+    uint8_t tHeight = top.height();
+    uint8_t tdHeight = top_dtime_bat.height();
+    top_dtime_bat.clear(BLACK);
+    top_dtime_bat.setTextColor(WHITE, BLACK);
+    top_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
+    if (M5.Power.Axp2101.isVBUS()) { top_dtime_bat.setTextColor(CYAN, BLACK); }
+    top_dtime_bat.drawRightString(String(battery)+"%", width, 0, &fonts::Font2);
+    top_dtime_bat.pushSprite(0, 0);
+    canv.pushSprite(0, tHeight-scroll);
+    top.pushSprite(0, 0);
+    disp.pushSprite(0, 0, M5.Lcd.color565(16, 8, 16));
+    if (M5.BtnA.wasPressed()) {
+      backFunction();
+    } else if (M5.Touch.getCount() > 0) {
+      auto detail = M5.Touch.getDetail();
+      if (detail.y < 240) {
+        if (firstX == -1) {
+          firstX = detail.x;
+          firstY = detail.y;
         }
-        scrollAccel[accelArrSize-1] = prevY-detail.y;
-        scroll += scrollAccel[accelArrSize-1];
-        scrollCount += scrollAccel[accelArrSize-1];
-      }
-      prevX = detail.x;
-      prevY = detail.y;
-    }
-  } else {
-    scrollAccel[0] = floor(scrollAccel[0]*0.8);
-    scroll += scrollAccel[0];
-    if (prevX != -1) {
-      if (64 >= prevY && prevY > 16) {
-        if (prevX <= 34) {
-          backFunction();
+        uint8_t accelArrSize = (sizeof(scrollAccel)/sizeof(int16_t));
+        if (prevY != -1) {
+          for (int i = 0; i < accelArrSize-1; i++) {
+            scrollAccel[i] = scrollAccel[i+1];
+          }
+          scrollAccel[accelArrSize-1] = prevY-detail.y;
+          scroll += scrollAccel[accelArrSize-1];
+          scrollCount += scrollAccel[accelArrSize-1];
         }
-      } else {
-        int touched = floor((prevY+scroll)/rowSize)-1;
-        if (scrollCount == 0 && items.size() > touched && touched >= 0) {
-          String touchedID = *std::next(items.begin(), touched);
-          if (itemUseArgFunction[touchedID]) {
-            itemArgFunction[touchedID](touchedID);
-          } else {
-            itemFunction[touchedID]();
+        prevX = detail.x;
+        prevY = detail.y;
+      }
+    } else {
+      scrollAccel[0] = floor(scrollAccel[0]*0.8);
+      scroll += scrollAccel[0];
+      if (prevX != -1) {
+        if (64 >= prevY && prevY > 16) {
+          if (prevX <= 34) {
+            backFunction();
+          }
+        } else {
+          int touched = floor((prevY+scroll)/rowSize)-1;
+          if (scrollCount == 0 && items.size() > touched && touched >= 0) {
+            String touchedID = *std::next(items.begin(), touched);
+            if (itemUseArgFunction[touchedID]) {
+              itemArgFunction[touchedID](touchedID);
+            } else {
+              itemFunction[touchedID]();
+            }
           }
         }
       }
+      prevX = -1;
+      prevY = -1;
+      firstX = -1;
+      firstY = -1;
+      scrollCount = 0;
     }
-    prevX = -1;
-    prevY = -1;
-    firstX = -1;
-    firstY = -1;
-    scrollCount = 0;
-  }
-  if (scroll < 0) {
-    scroll = 0;
-  } else if (scroll > cHeight-height+tHeight) {
-    scroll = cHeight-height+tHeight;
+    if (scroll < 0) {
+      scroll = 0;
+    } else if (scroll > cHeight-height+tHeight) {
+      scroll = cHeight-height+tHeight;
+    }
+  } else if (M5.Touch.getCount() == 0) {
+    firstTouch--;
+  } else {
+    firstTouch = 3;
   }
 }
 
@@ -316,6 +323,7 @@ void UI::reset() {
   scrollAccel[1] = 0;
   scrollAccel[2] = 0;
   transparentMode = false;
+  firstTouch = 3;
   backFunction = nothing;
   items.clear();
   itemLocale.clear();
