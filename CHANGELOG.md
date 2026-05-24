@@ -1,12 +1,20 @@
 # Changelog
 Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Minor Update]`. Some months may be missing. Most updates include minor fixes that are not listed here. The versions listed below are also available from M5Burner. Other development versions are only available from GitHub.
 
+# Ver 26.5
+- Reduced power consumption by partially putting the ESP32 into light sleep mode.
+- The ZeroDial design has been slightly adjusted.
+- Sleep and wake functions can now be activated with a short press of the power button.
+- Notifications are now displayed when an update is available.
+- For some reason, the M5Burner version was not available regardless of whether it was Core2 or CoreS3.
+
 # Ver 26.4.1
 - Added a new theme, "ZeroDial," experimentally. You can revert to the traditional watch face style in the settings.
 - Fixed a bug where automatic time setting would enter an infinite loop when connecting to Wi-Fi.
 - Fixed a bug where setting the time would sometimes prevent the next alarm from sounding.
 - Fixed a bug where initial settings were not applied after Wi-Fi setup.
-- Due to various circumstances, the CoreS3 version of V26.4.1 is not available on M5Burner. Please download it from GitHub or use an older version.
+- ~~Due to various circumstances, the CoreS3 version of V26.4.1 is not available on M5Burner. Please download it from GitHub or use an older version.~~
+- For some reason, the M5Burner version was not available regardless of whether it was Core2 or CoreS3.
 
 # Ver 26.4
 - You can now configure the sleep time and external port power output in the settings.
@@ -41,12 +49,20 @@ Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Mi
 # 変更ログ（日本語）
 バージョン番号は`[年].[月]`または`[年].[月].[マイナーアップデート]`のように表記されます。一部の月は欠番となることがあります。ほとんどのアップデートはここに書かれていない細かなバグ修正を含みます。以下にリストアップされたバージョンはM5Burnerでも使用可能です。ほかの開発バージョンはGitHubからでのみダウンロードできます。
 
+# Ver 26.5
+- ESP32を部分的にライトスリープさせることにより消費電力の削減を図りました。
+- ZeroDialのデザインが微調整されました。
+- 電源ボタンの短押しでスリープ及びスリープ解除ができるようになりました。
+- アップデートが来た時に通知が来るようになりました。
+- 諸事情により、V26.4のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+
 # Ver 26.4.1
 - 試験的に新しいテーマ「ZeroDial」を追加しました。設定で従来スタイルの文字盤に戻せます。
 - 自動時刻合わせで、Wi-Fiの接続で無限ループに入ってしまうバグを修正しました。
 - 時刻設定をすると次のアラームが鳴らないことがあるバグを修正しました。
 - Wi-Fiセットアップ後に初期設定が反映されないバグを修正しました。
-- 諸事情により、V26.4.1のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+- ~~諸事情により、V26.4.1のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。~~
+- なぜかCore2、CoreS3関係なくM5Burner版の提供はありませんでした。
 
 # Ver 26.4
 - 設定でスリープするまでの時間や外部ポートの電源出力を設定できるようになりました。
