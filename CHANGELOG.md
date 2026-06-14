@@ -1,12 +1,18 @@
 # Changelog
 Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Minor Update]`. Some months may be missing. Most updates include minor fixes that are not listed here. The versions listed below are also available from M5Burner. Other development versions are only available from GitHub.
 
+# Ver 26.6
+- You can now set the volume and vibration settings for alarm and timer notifications.
+- You can now change the display brightness in the settings.
+- You can now set the maximum charging current and maximum charging voltage from the settings.
+- Due to various circumstances, the CoreS3 version of V26.6 is not available on M5Burner. Please download it from GitHub or use an older version.
+
 # Ver 26.5
 - Reduced power consumption by partially putting the ESP32 into light sleep mode.
 - The ZeroDial design has been slightly adjusted.
 - Sleep and wake functions can now be activated with a short press of the power button.
 - Notifications are now displayed when an update is available.
-- For some reason, the M5Burner version was not available regardless of whether it was Core2 or CoreS3.
+- Due to various circumstances, the CoreS3 version of V26.5 is not available on M5Burner. Please download it from GitHub or use an older version.
 
 # Ver 26.4.1
 - Added a new theme, "ZeroDial," experimentally. You can revert to the traditional watch face style in the settings.
@@ -49,12 +55,18 @@ Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Mi
 # 変更ログ（日本語）
 バージョン番号は`[年].[月]`または`[年].[月].[マイナーアップデート]`のように表記されます。一部の月は欠番となることがあります。ほとんどのアップデートはここに書かれていない細かなバグ修正を含みます。以下にリストアップされたバージョンはM5Burnerでも使用可能です。ほかの開発バージョンはGitHubからでのみダウンロードできます。
 
+# Ver 26.6
+- アラームやタイマーの通知のボリューム及び振動の有無が設定できるようになりました。
+- ディスプレイの輝度を設定で変更できるようになりました。
+- 設定から最大充電電流と最大充電電圧を設定できるようになりました。
+- 諸事情により、V26.6のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+
 # Ver 26.5
 - ESP32を部分的にライトスリープさせることにより消費電力の削減を図りました。
 - ZeroDialのデザインが微調整されました。
 - 電源ボタンの短押しでスリープ及びスリープ解除ができるようになりました。
 - アップデートが来た時に通知が来るようになりました。
-- 諸事情により、V26.4のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+- 諸事情により、V26.5のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
 
 # Ver 26.4.1
 - 試験的に新しいテーマ「ZeroDial」を追加しました。設定で従来スタイルの文字盤に戻せます。

@@ -66,3 +66,17 @@ String successOrFail(bool target) {
   if (target) return "Success";
   return "Failed";
 }
+
+uint32_t calculateElapsedTime(uint32_t start, uint32_t end) {
+  if (end >= start) return end - start;
+  return (UINT32_MAX - start) + end + 1;
+}
+
+uint8_t combineHex(uint8_t lower, uint8_t upper) {
+  return (upper << 4) | lower;
+}
+
+void decombineHex(uint8_t hexValue, uint8_t *lower, uint8_t *upper) {
+  *lower = hexValue & 0x0F;
+  *upper = (hexValue >> 4) & 0x0F;
+}

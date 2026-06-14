@@ -143,7 +143,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2605000; // [version]
+const uint32_t version = 2606000; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
@@ -161,7 +161,7 @@ String M5Model;
 // Sleep, vibration, and screen gesture tracking variables
 
 int32_t slpTimer = 0;
-uint64_t vibTimer = 0;
+uint32_t vibTimer = 0;
 int32_t screenSwipe = 0;
 int32_t screenSwipeVertical = 0;
 int32_t screenSwipeVerticalFirst = 0;
@@ -176,14 +176,18 @@ int32_t appStart = 0;
 int32_t checkAlarmTimer = 0;
 uint8_t lastAlarmMin = 60;
 uint16_t lastSync = 0;
-uint64_t birthChangeTimer = 0;
+uint32_t birthChangeTimer = 0;
 uint8_t birthChangeID = 0;
 uint8_t timeSyncMinute = 60;
 uint8_t modelType = 0; // 2 for Core2, 10 for CoreS3
 uint32_t latestVer = 0;
 uint8_t backLight = 64;
 uint16_t shutdownTimer = 0;
-uint64_t mainLoopTimer = 0;
+uint32_t mainLoopTimer = 0;
+uint8_t chargeCurrent = 1;
+uint8_t chargeVoltage = 0;
+uint8_t screenBrightness = 1;
+uint8_t speakerVolume = 1;
 
 char lang[3];
 uint8_t sleepTimings[4] = {};
@@ -206,6 +210,7 @@ bool touchedOnMenu = false;
 bool autoShutdown = true; // 設定可能WIP
 bool doDraw = true;
 bool axp2101 = false;
+bool vibration = false;
 
 uint8_t battery = M5.Power.getBatteryLevel();
 m5::rtc_datetime_t dateTime; // RTC日時情報 / Real-time clock date/time
@@ -213,6 +218,28 @@ m5::rtc_datetime_t dateTime; // RTC日時情報 / Real-time clock date/time
 // ======================================
 // ===== Utility Functions (汎用関数) =====
 // ======================================
+
+// ISR callback - signal to skip drawing in current loop cycle
+IRAM_ATTR void touchInterrupt() {
+  doDraw = false;
+}
+
+void compatibleAttachInterrupt() {
+  if (modelType == 10) {
+    attachInterrupt(GPIO_NUM_21, touchInterrupt, FALLING);
+  } else {
+    attachInterrupt(GPIO_NUM_39, touchInterrupt, FALLING);
+  }
+}
+
+void compatibleDetachInterrupt() {
+  if (modelType == 10) {
+    detachInterrupt(GPIO_NUM_21);
+  } else {
+    detachInterrupt(GPIO_NUM_39);
+  }
+}
+
 
 // 太い線を描画 / Draw a thicker line by overlaying multiple shifted lines
 void thickLine(M5Canvas target, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t color) {
@@ -275,20 +302,18 @@ String getModel() {
 
 // アプリケーション実行終了処理 / Cleanup and teardown running application
 void appEnd() {
-  if (millis() > appStart+100) {
-    if (nowApp == APP_STOPWATCH) {
-      cv_stwt1.deleteSprite();
-      cv_stwt2.deleteSprite();
-      cv_stwt3.deleteSprite();
-      cv_stwt4.deleteSprite();
-      cv_stwt5.deleteSprite();
-      cv_stwt_top.deleteSprite();
-    }
-    nowApp = APP_NOTHING;
-    UIAddtional = UI_NOTHING;
-    appUI.reset();
-    M5.Speaker.end();
+  if (nowApp == APP_STOPWATCH) {
+    cv_stwt1.deleteSprite();
+    cv_stwt2.deleteSprite();
+    cv_stwt3.deleteSprite();
+    cv_stwt4.deleteSprite();
+    cv_stwt5.deleteSprite();
+    cv_stwt_top.deleteSprite();
   }
+  nowApp = APP_NOTHING;
+  UIAddtional = UI_NOTHING;
+  appUI.reset();
+  M5.Speaker.end();
 }
 
 // 日本の祝日判定 / Check if a given date is a Japanese holiday (powered by ChatGPT)
@@ -424,14 +449,20 @@ bool isVbus() {
   // return M5.Power.getVBUSVoltage() > 4900; // 4.9V以上をUSB接続とみなす（充電中も含む）
 }
 
-void compatibleLightSleep(uint64_t duration) {
-  noInterrupts();
+void compatibleLightSleep(uint32_t duration, bool noInterrupt) {
+  if (noInterrupt) {
+    //noInterrupts();
+    compatibleDetachInterrupt();
+  }
   if (modelType == 10) {
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_21, false);
     esp_sleep_enable_timer_wakeup(duration);
     esp_light_sleep_start();
   } else M5.Power.lightSleep(duration);
-  interrupts();
+  if (noInterrupt) {
+    //interrupts();
+    compatibleAttachInterrupt();
+  }
 }
 
 // 指定日付から翌日を計算（月末日や年末変更を処理） / Calculate next calendar day
@@ -620,26 +651,27 @@ void syncTimeOnSettings() {
 // アラーム/スピード速報を試播と操作で試播を実行 / Display notice with sound and vibration
 void notice(String title, String time) {
   M5.Display.wakeup();
-  M5.Display.setBrightness(63);
+  M5.Display.setBrightness(255*((screenBrightness+1)/10.0));
   M5.Display.clear();
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
   M5.Display.drawCenterString("Touch to Stop", sizeX/2, (sizeY/2)+50, &fonts::Font4);
   M5.Display.drawCenterString(time, sizeX/2, sizeY/2, &fonts::Font6);
   M5.Display.drawCenterString(title, sizeX/2, (sizeY/2)-50, &fonts::Font4);
   M5.Speaker.begin();
-  M5.Speaker.setVolume(200);
+  M5.Speaker.setVolume(255*((speakerVolume)/10.0));
   uint16_t soundTimer = 2000;
   while (true) {
     int32_t loopTimer = millis();
     if (soundTimer == 2000) {
       soundTimer = 0;
-      M5.Speaker.playWav(alarm_sound);
-      M5.Power.setVibration(127);
+      if (speakerVolume != 0) M5.Speaker.playWav(alarm_sound);
+      if (vibration) M5.Power.setVibration(127);
     } else if (soundTimer == 1000) {
       M5.Power.setVibration(0);
     }
     M5.update();
-    if (M5.Touch.getCount() > 0) {
+    if (M5.Touch.getDetail().wasClicked()) {
+      M5.update();
       M5.Speaker.end();
       return;
     }
@@ -773,7 +805,7 @@ void lowPowSleep() {
         lastSync = dateTime.date.date+(dateTime.date.month<<5);
       }
     }
-    compatibleLightSleep(10000000);
+    compatibleLightSleep(10000000, true);
     M5.update();
     touch = M5.Touch.getCount();
   }
@@ -791,7 +823,7 @@ void activeSleep() {
   M5.Display.sleep();
   updateExtOutput(false, charged);
   while (!((touch > 0) or (charged != isVbus()))) {
-    compatibleLightSleep(100000);
+    compatibleLightSleep(100000, true);
     M5.update();
     if (M5.BtnPWR.getState() == m5::Button_Class::state_clicked) break;
     if ((!charged) and (checkGyro())) break;
@@ -937,14 +969,28 @@ void settings_setDate();
 void settings_chooseYear();
 void settings_powerBack();
 void settings_powerChoose();
+void settings_display();
+void settings_chooseBrightness();
+void settings_setBrightness(String brightness);
+void settings_chooseStyle();
+void settings_setStyle(String style);
+void settings_notice();
+void settings_chooseVolume();
+void settings_setVolume(String volume);
+void settings_switchVibration();
+void settings_testNotice();
 void settings_power(String chargeOrBattery);
+void settings_chooseVoltage();
+void settings_setVoltage(String voltage);
+void settings_chooseCurrent();
+void settings_setCurrent(String current);
 void settings_switchSleep();
 void settings_chooseExtPower();
 void settings_setExtPower(String extMode);
 void settings_chooseSleep(String touchOrGyro);
 void settings_setSleep(String slpTime);
 void settings_setAutoShutdown();
-void settings_style();
+void settings_chooseStyle();
 void settings_setStyle(String style);
 void settings_info();
 void settings_setYear(String year);
@@ -970,7 +1016,6 @@ String getVersionString(uint32_t ver) {
 }
 
 void settings_init() {
-  appStart = millis();
   appUI.reset();
   appUI.setTitle("Settings");
   appUI.setLocaleFont("en", 0);
@@ -993,22 +1038,17 @@ void settings_init() {
   appUI.addLocaleToItem("power", "ja", "電源設定");
   appUI.addItem("time", settings_dateTime, "Date and Time");
   appUI.addLocaleToItem("time", "ja", "日付と時刻");
+  appUI.addItem("display", settings_display, "Display and Visuals");
+  appUI.addLocaleToItem("display", "ja", "ディスプレイと外観");
+  appUI.addItem("notice", settings_notice, "Notices");
+  appUI.addLocaleToItem("notice", "ja", "通知");
   appUI.addItem("verinfo", settings_info, "Infomation");
   appUI.addLocaleToItem("verinfo", "ja", "情報");
-  appUI.addItem("style", settings_style, "Dial Style");
-  appUI.addLocaleToItem("style", "ja", "文字盤のスタイル");
-  if (dialType == DIAL_CLASSIC) {
-    appUI.addRightLocaleToItem("style", "en", "Classic");
-    appUI.addRightLocaleToItem("style", "ja", "クラシック");
-  } else {
-    appUI.addRightLocaleToItem("style", "en", "ZeroDial");
-  }
   appUI.linkFunctionToBack(appEnd);
   appUI.makeUI(lang);
 }
 
 void settings_chooseLang() {
-  appStart = millis();
   appUI.reset();
   appUI.setTitle("Change Language");
   appUI.addItem("en", settings_setLang, "English");
@@ -1025,7 +1065,6 @@ void settings_setLang(String langTarget) {
 }
 
 void settings_dateTime() {
-  appStart = millis();
   appUI.reset();
   appUI.setTitle("Date and Time");
   appUI.setLocaleFont("en", 0);
@@ -1130,17 +1169,58 @@ void settings_setTime() {
   settings_init();
 }
 
-void settings_style() {
-  appStart = millis();
+void settings_display() {
+  appUI.reset();
+  appUI.setTitle("Display and Visuals");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.addLocaleToTitle("ja", "ディスプレイと外観");
+  appUI.linkFunctionToBack(settings_init);
+  appUI.addItem("brightness", settings_chooseBrightness, "Screen Brightness");
+  appUI.addLocaleToItem("brightness", "ja", "画面の明るさ");
+  appUI.addRightLocaleToItem("brightness", "en", String((screenBrightness+1)*10)+"%");
+  appUI.addItem("style", settings_chooseStyle, "Dial Style");
+  appUI.addLocaleToItem("style", "ja", "文字盤のスタイル");
+  if (dialType == DIAL_CLASSIC) {
+    appUI.addRightLocaleToItem("style", "en", "Classic");
+    appUI.addRightLocaleToItem("style", "ja", "クラシック");
+  } else {
+    appUI.addRightLocaleToItem("style", "en", "ZeroDial");
+  }
+  appUI.makeUI(lang);
+}
+
+void settings_chooseBrightness() {
   appUI.reset();
   appUI.setLocaleFont("en", 0);
   appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("style");
-  appUI.addLocaleToTitle("ja", "スタイル");
+  appUI.setTitle("Screen Brightness");
+  appUI.addLocaleToTitle("ja", "画面の明るさ");
+  for (uint8_t i = 1; i <= 10; i++) {
+    appUI.addItem(String(i-1), settings_setBrightness, String(i*10)+"%");
+    appUI.addLocaleToItem(String(i-1), "ja", String(i*10)+"%");
+  }
+  appUI.linkFunctionToBack(settings_display);
+  appUI.makeUI(lang);
+}
+
+void settings_setBrightness(String brightness) {
+  settings_saved = false;
+  screenBrightness = brightness.toInt();
+  M5.Display.setBrightness(255*((screenBrightness+1)/10.0));
+  settings_display();
+}
+
+void settings_chooseStyle() {
+  appUI.reset();
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.setTitle("Dial Style");
+  appUI.addLocaleToTitle("ja", "文字盤のスタイル");
   appUI.addItem("classic", settings_setStyle, "Classic");
   appUI.addLocaleToItem("classic", "ja", "クラシック");
   appUI.addItem("zerodial", settings_setStyle, "ZeroDial");
-  appUI.linkFunctionToBack(settings_init);
+  appUI.linkFunctionToBack(settings_display);
   appUI.makeUI(lang);
 }
 
@@ -1155,8 +1235,60 @@ void settings_setStyle(String style) {
   settings_init();
 }
 
+void settings_notice() {
+  appUI.reset();
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.setTitle("Notices");
+  appUI.addLocaleToTitle("ja", "通知");
+  appUI.addItem("volume", settings_chooseVolume, "Volume");
+  appUI.addLocaleToItem("volume", "ja", "音量");
+  appUI.addRightLocaleToItem("volume", "en", String((speakerVolume)*10)+"%");
+  appUI.addItem("vibration", settings_switchVibration, "Vibration");
+  appUI.addLocaleToItem("vibration", "ja", "振動");
+  appUI.addRightLocaleToItem("vibration", "en", boolStr(modelType == 2, boolStr(vibration, "Enable", "Disable"), "N/A"));
+  appUI.addRightLocaleToItem("vibration", "ja", boolStr(modelType == 2, boolStr(vibration, "有効", "無効"), "使用不可"));
+  appUI.addItem("testNotice", settings_testNotice, "Test Notice");
+  appUI.addLocaleToItem("testNotice", "ja", "通知のテスト");
+  appUI.linkFunctionToBack(settings_init);
+  appUI.makeUI(lang);
+}
+
+void settings_chooseVolume() {
+  appUI.reset();
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.setTitle("Volume");
+  appUI.addLocaleToTitle("ja", "音量");
+  for (uint8_t i = 0; i <= 10; i++) {
+    appUI.addItem(String(i), settings_setVolume, String(i*10)+"%");
+    appUI.addLocaleToItem(String(i), "ja", String(i*10)+"%");
+  }
+  appUI.linkFunctionToBack(settings_notice);
+  appUI.makeUI(lang);
+}
+
+void settings_setVolume(String volume) {
+  settings_saved = false;
+  speakerVolume = volume.toInt();
+  settings_notice();
+}
+
+void settings_switchVibration() {
+  if (modelType == 2) {
+    vibration = !vibration;
+    settings_saved = false;
+    appUI.addRightLocaleToItem("vibration", "en", boolStr(vibration, "Enable", "Disable"));
+    appUI.addRightLocaleToItem("vibration", "ja", boolStr(vibration, "有効", "無効"));
+    appUI.makeUI(lang);
+  }
+}
+
+void settings_testNotice() {
+  notice("Test Notice", "");
+}
+
 void settings_info() {
-  appStart = millis();
   appUI.reset();
   String verStr = getVersionString(version);
   appUI.setLocaleFont("en", 0);
@@ -1197,7 +1329,8 @@ void settings_info() {
 }
 
 void settings_powerChoose() {
-  appStart = millis();
+  uint32_t fixedChargeCurrent = chargeCurrent*100;
+  float fixedChargeVoltage = (chargeVoltage*0.1)+4.0;
   appUI.reset();
   appUI.setTitle("Power Settings");
   appUI.setLocaleFont("en", 0);
@@ -1208,7 +1341,65 @@ void settings_powerChoose() {
   appUI.addLocaleToItem("charge", "ja", "充電時の設定");
   appUI.addItem("battery", settings_power, "Settings when Battery");
   appUI.addLocaleToItem("battery", "ja", "バッテリー時の設定");
+  appUI.addItem("current", settings_chooseCurrent, "Max Charge Current");
+  appUI.addLocaleToItem("current", "ja", "最大充電電流");
+  appUI.addRightLocaleToItem("current", "en", String(fixedChargeCurrent)+"mA");
+  appUI.addRightLocaleToItem("current", "ja", String(fixedChargeCurrent)+"mA");
+  appUI.addItem("voltage", settings_chooseVoltage, "Max Charge Voltage");
+  appUI.addLocaleToItem("voltage", "ja", "最大充電電圧");
+  appUI.addRightLocaleToItem("voltage", "en", String(fixedChargeVoltage, 1)+"V");
+  appUI.addRightLocaleToItem("voltage", "ja", String(fixedChargeVoltage, 1)+"V");
   appUI.makeUI(lang);
+}
+
+void settings_chooseCurrent() {
+  appUI.reset();
+  appUI.setTitle("Max Charge Current");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.addLocaleToTitle("ja", "最大充電電流");
+  appUI.addItem("1", settings_setCurrent, "100mA");
+  appUI.addItem("2", settings_setCurrent, "200mA");
+  appUI.addItem("3", settings_setCurrent, "300mA");
+  appUI.makeUI(lang);
+}
+
+void settings_setCurrent(String current) {
+  settings_saved = false;
+  if (current == "1") {
+    chargeCurrent = 1;
+  } else if (current == "2") {
+    chargeCurrent = 2;
+  } else if (current == "3") {
+    chargeCurrent = 3;
+  }
+  M5.Power.setChargeCurrent(min(chargeCurrent*100, 300));
+  settings_powerChoose();
+}
+
+void settings_chooseVoltage() {
+  appUI.reset();
+  appUI.setTitle("Max Charge Voltage");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.addLocaleToTitle("ja", "最大充電電圧");
+  appUI.addItem("0", settings_setVoltage, "4.0V");
+  appUI.addItem("1", settings_setVoltage, "4.1V");
+  appUI.addItem("2", settings_setVoltage, "4.2V");
+  appUI.makeUI(lang);
+}
+
+void settings_setVoltage(String voltage) {
+  settings_saved = false;
+  if (voltage == "0") {
+    chargeVoltage = 0;
+  } else if (voltage == "1") {
+    chargeVoltage = 1;
+  } else if (voltage == "2") {
+    chargeVoltage = 2;
+  }
+  M5.Power.setChargeVoltage(min((chargeVoltage*100)+4000, 4200));
+  settings_powerChoose();
 }
 
 void settings_power(String chargeOrBattery) {
@@ -1224,7 +1415,6 @@ void settings_power(String chargeOrBattery) {
 }
 
 void settings_powerBack() {
-  appStart = millis();
   appUI.reset();
   if (settings_choseBat) appUI.setTitle("Power (Bat)");
   else appUI.setTitle("Power (Chg)");
@@ -1274,7 +1464,6 @@ void settings_switchSleep() {
 }
 
 void settings_chooseExtPower() {
-  appStart = millis();
   appUI.reset();
   if (settings_choseBat) appUI.setTitle("Ext.Power (Bat)");
   else appUI.setTitle("Ext.Power (Chg)");
@@ -1301,7 +1490,6 @@ void settings_setExtPower(String extMode) {
 }
 
 void settings_chooseSleep(String touchOrGyro) {
-  appStart = millis();
   appUI.reset();
   char initial;
   if (touchOrGyro == "touchsleep") {
@@ -1353,6 +1541,8 @@ void settings_save() {
     uint8_t slpFlags = ((uint8_t) extSettings[0] << 4) | ((uint8_t) extSettings[1] << 2) | ((uint8_t) doSleep[0] << 1) | ((uint8_t) doSleep[1]);
     pref.putUChar("slpFlags", slpFlags);
     pref.putUChar("dialType", dialType);
+    pref.putUChar("charge", combineHex(chargeCurrent, chargeVoltage));
+    pref.putUChar("hmi", (vibration << 7)+(speakerVolume*10)+screenBrightness);
     pref.end();
     appUI.addRightLocaleToItem("save", "en", "Saved");
     appUI.addRightLocaleToItem("save", "ja", "保存済み");
@@ -1381,7 +1571,6 @@ void alarm_switchWeekend();
 void alarm_save();
 
 void alarm_init() {
-  appStart = millis();
   appUI.reset();
   appUI.setLocaleFont("en", 0);
   appUI.setLocaleFont("ja", 1);
@@ -1673,7 +1862,6 @@ void train_switch_week();
 void train_switch_mode();
 
 void train_init() {
-  appStart = millis();
   train_isMainUI = true;
   train_refleshTimer = 0;
   appUI.reset();
@@ -1876,7 +2064,6 @@ void timer_remove();
 void timer_loop();
 
 void timer_init() {
-  appStart = millis();
   timer_editing = 0;
   train_isMainUI = true;
   train_refleshTimer = 0;
@@ -1983,7 +2170,6 @@ void edev_init();
 void edev_loop();
 
 void edev_init() {
-  appStart = millis();
   M5.Ex_I2C.begin();
   //Wire1.setTimeout(10);
   appUI.reset();
@@ -2265,6 +2451,36 @@ void setupConfigs() {
     M5.Display.println("Unsupported Model");
   }
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  M5.Display.print("Loading Preferences...");
+  Preferences pref;
+  pref.begin("mk75_settings");
+  String langStr = pref.getString("lang", "en");
+  uint32_t slpTime = pref.getUInt("slpTime", 252642565);
+  uint8_t slpFlags = pref.getUChar("slpFlags", 7);
+  latestVer = pref.getUInt("latestVer", version);
+  dialType = (dialtype_t) pref.getUChar("dialType", 0);
+  uint8_t chargeSettings = pref.getUChar("charge", 0x23);
+  decombineHex(chargeSettings, &chargeCurrent, &chargeVoltage);
+  M5.Power.setChargeCurrent(min(chargeCurrent*100, 300));
+  M5.Power.setChargeVoltage(min((chargeVoltage*100)+4000, 4200));
+  uint8_t screenVolumeAndVibration = pref.getUChar("hmi", (0x80*(modelType==2))+52); // Human machine interface
+  vibration = (screenVolumeAndVibration >> 7) & 0x01;
+  uint8_t screenAndVolume = screenVolumeAndVibration & 0x7F;
+  screenBrightness = screenAndVolume%10;
+  speakerVolume = screenAndVolume/10;
+  pref.end();
+  M5.Display.setBrightness(255*((screenBrightness+1)/10.0));
+  lang[0] = langStr.charAt(0);
+  lang[1] = langStr.charAt(1);
+  for (uint8_t i = 0; i < 4; i++) {
+    sleepTimings[i] = (slpTime >> (24-(i*8))) & 0xFF;
+    sleepTimings_sys[i] = 60000-(sleepTimings[i]*1000);
+  }
+  extSettings[0] = (extsettings_t) ((slpFlags >> 4) & 0x03);
+  extSettings[1] = (extsettings_t) ((slpFlags >> 2) & 0x03);
+  doSleep[0] = (slpFlags >> 1) & 0x01;
+  doSleep[1] = (slpFlags) & 0x01;
+  M5.Display.println("Success");
   if (!LittleFS.begin()) {
     M5.Display.print("Formatting LittleFS (It takes long time) ...");
     LittleFS.format();
@@ -2284,24 +2500,6 @@ void setupConfigs() {
     setRTCAlarmIRQ();
     M5.Display.print("Loading special dates json...");
     M5.Display.println(successOrFail(readSPIJson("/special_dates.json", &spDatesJson, 10000)));
-    Preferences pref;
-    pref.begin("mk75_settings");
-    String langStr = pref.getString("lang", "en");
-    uint32_t slpTime = pref.getUInt("slpTime", 252642565);
-    uint8_t slpFlags = pref.getUChar("slpFlags", 7);
-    latestVer = pref.getUInt("latestVer", version);
-    dialType = (dialtype_t) pref.getUChar("dialType", 0);
-    pref.end();
-    lang[0] = langStr.charAt(0);
-    lang[1] = langStr.charAt(1);
-    for (uint8_t i = 0; i < 4; i++) {
-      sleepTimings[i] = (slpTime >> (24-(i*8))) & 0xFF;
-      sleepTimings_sys[i] = 60000-(sleepTimings[i]*1000);
-    }
-    extSettings[0] = (extsettings_t) ((slpFlags >> 4) & 0x03);
-    extSettings[1] = (extsettings_t) ((slpFlags >> 2) & 0x03);
-    doSleep[0] = (slpFlags >> 1) & 0x01;
-    doSleep[1] = (slpFlags) & 0x01;
     delay(1000);
     checkAlarm();
     M5.Display.clear();
@@ -2365,7 +2563,7 @@ void loopSleep() {
       }
       afterSlp = true;
       M5.Display.wakeup();
-      M5.Display.setBrightness(63);
+      M5.Display.setBrightness(255*((screenBrightness+1)/10.0));
       if (isVbus()) slpTimer = sleepTimings_sys[0];
       else slpTimer = sleepTimings_sys[1];
     }
@@ -2480,11 +2678,6 @@ void loopTimeSel() {
   }
 }
 
-// ISR callback - signal to skip drawing in current loop cycle
-IRAM_ATTR void touchInterrupt() {
-  doDraw = false;
-}
-
 // ======================================
 // ===== Arduino Setup & Main Loop ======
 // ======================================
@@ -2499,17 +2692,12 @@ void setup() {
   M5.Imu.begin();
   M5.Rtc.begin();
   M5.Display.init();
-  M5.Display.setBrightness(63);
   dateTime = M5.Rtc.getDateTime();
   setupConfigs();
   setupSprites();
   //setupMenu();
   wasVBUS = isVbus();
-  if (modelType == 10) {
-    attachInterrupt(GPIO_NUM_21, touchInterrupt, FALLING);
-  } else {
-    attachInterrupt(GPIO_NUM_39, touchInterrupt, FALLING);
-  }
+  compatibleAttachInterrupt();
   bool powered = isVbus();
   if (powered) slpTimer = sleepTimings_sys[0];
   else slpTimer = sleepTimings_sys[1];
@@ -2520,7 +2708,7 @@ void setup() {
 
 // Main event loop - handles display updates, touch input, app logic, and power management
 void loop() {
-  int64_t tmrStart = millis();
+  int32_t tmrStart = millis();
   M5.update();
   //SFE.update();
   doDraw = true;
@@ -2596,12 +2784,22 @@ void loop() {
       if (doDraw) cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
     }
     if (doDraw) cv_display.pushSprite(0, 0);
-    if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && !touch) {
-      int64_t slpTime = 1000000-(micros()-mainLoopTimer);
+    if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && doDraw && !touch) {
+      uint32_t cycleTime = calculateElapsedTime(mainLoopTimer, micros());
+      int32_t slpTime;
+      if (cycleTime < 1000000) {
+        slpTime = 1000000-cycleTime;
+      } else {
+        slpTime = 0;
+      }
       if (vibTimer > millis()) {
         uint32_t vibMS = (vibTimer-millis())*1000;
-        slpTime -= vibMS;
-        compatibleLightSleep(vibMS);
+        if (slpTime > vibMS) {
+          slpTime -= vibMS;
+        } else {
+          slpTime = 0;
+        }
+        compatibleLightSleep(vibMS, true);
         if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
           slpTime -= vibMS*1000;
           vibTimer = 0;
@@ -2610,7 +2808,7 @@ void loop() {
           slpTime = 0;
         }
       }
-      if (slpTime > 0) compatibleLightSleep(slpTime);
+      if (slpTime > 0) compatibleLightSleep(slpTime, true);
     }
     mainLoopTimer = micros();
   }

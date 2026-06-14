@@ -40,10 +40,10 @@ void SerialFileEdit::update() {
         decltype(parsed)::iterator itr = parsed.begin();
         if (parsed.size() >= 2) {
           String cmd = *itr;
-          SFE_Stream->println(cmd); // DEBUG
+          // SFE_Stream->println(cmd); // DEBUG
           itr++;
           String file = *itr;
-          SFE_Stream->println(file); // DEBUG
+          // SFE_Stream->println(file); // DEBUG
           if (cmd == "ex") {
             if (SFE_System->exists(file)) {
               SFE_Stream->print(1);
