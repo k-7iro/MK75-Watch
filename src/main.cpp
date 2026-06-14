@@ -10,6 +10,8 @@
 #include <LittleFS.h>
 #include <Wire.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <esp32_cert_bundle.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <esp_sntp.h>
@@ -143,11 +145,40 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2606000; // [version]
+const uint32_t version = 2606140; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
 const IPAddress subnet(255, 255, 255, 0);
+const char* github_root_ca = "-----BEGIN CERTIFICATE-----\n"
+"MIIFBjCCAu6gAwIBAgIRAMISMktwqbSRcdxA9+KFJjwwDQYJKoZIhvcNAQELBQAw\n"
+"TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\n"
+"cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMjQwMzEzMDAwMDAw\n"
+"WhcNMjcwMzEyMjM1OTU5WjAzMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNTGV0J3Mg\n"
+"RW5jcnlwdDEMMAoGA1UEAxMDUjEyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB\n"
+"CgKCAQEA2pgodK2+lP474B7i5Ut1qywSf+2nAzJ+Npfs6DGPpRONC5kuHs0BUT1M\n"
+"5ShuCVUxqqUiXXL0LQfCTUA83wEjuXg39RplMjTmhnGdBO+ECFu9AhqZ66YBAJpz\n"
+"kG2Pogeg0JfT2kVhgTU9FPnEwF9q3AuWGrCf4yrqvSrWmMebcas7dA8827JgvlpL\n"
+"Thjp2ypzXIlhZZ7+7Tymy05v5J75AEaz/xlNKmOzjmbGGIVwx1Blbzt05UiDDwhY\n"
+"XS0jnV6j/ujbAKHS9OMZTfLuevYnnuXNnC2i8n+cF63vEzc50bTILEHWhsDp7CH4\n"
+"WRt/uTp8n1wBnWIEwii9Cq08yhDsGwIDAQABo4H4MIH1MA4GA1UdDwEB/wQEAwIB\n"
+"hjAdBgNVHSUEFjAUBggrBgEFBQcDAgYIKwYBBQUHAwEwEgYDVR0TAQH/BAgwBgEB\n"
+"/wIBADAdBgNVHQ4EFgQUALUp8i2ObzHom0yteD763OkM0dIwHwYDVR0jBBgwFoAU\n"
+"ebRZ5nu25eQBc4AIiMgaWPbpm24wMgYIKwYBBQUHAQEEJjAkMCIGCCsGAQUFBzAC\n"
+"hhZodHRwOi8veDEuaS5sZW5jci5vcmcvMBMGA1UdIAQMMAowCAYGZ4EMAQIBMCcG\n"
+"A1UdHwQgMB4wHKAaoBiGFmh0dHA6Ly94MS5jLmxlbmNyLm9yZy8wDQYJKoZIhvcN\n"
+"AQELBQADggIBAI910AnPanZIZTKS3rVEyIV29BWEjAK/duuz8eL5boSoVpHhkkv3\n"
+"4eoAeEiPdZLj5EZ7G2ArIK+gzhTlRQ1q4FKGpPPaFBSpqV/xbUb5UlAXQOnkHn3m\n"
+"FVj+qYv87/WeY+Bm4sN3Ox8BhyaU7UAQ3LeZ7N1X01xxQe4wIAAE3JVLUCiHmZL+\n"
+"qoCUtgYIFPgcg350QMUIWgxPXNGEncT921ne7nluI02V8pLUmClqXOsCwULw+PVO\n"
+"ZCB7qOMxxMBoCUeL2Ll4oMpOSr5pJCpLN3tRA2s6P1KLs9TSrVhOk+7LX28NMUlI\n"
+"usQ/nxLJID0RhAeFtPjyOCOscQBA53+NRjSCak7P4A5jX7ppmkcJECL+S0i3kXVU\n"
+"y5Me5BbrU8973jZNv/ax6+ZK6TM8jWmimL6of6OrX7ZU6E2WqazzsFrLG3o2kySb\n"
+"zlhSgJ81Cl4tv3SbYiYXnJExKQvzf83DYotox3f0fwv7xln1A2ZLplCb0O+l/AK0\n"
+"YE0DS2FPxSAHi0iwMfW2nNHJrXcY3LLHD77gRgje4Eveubi2xxa+Nmk/hmhLdIET\n"
+"iVDFanoCrMVIpQ59XWHkzdFmoHXHBV7oibVjGSO7ULSQ7MJ1Nz51phuDJSgAIU7A\n"
+"0zrLnOrAj/dfrlEWRhCvAgbuwLZX1A2sjNjXoPOHbsPiy+lO1KF8/XY7\n"
+"-----END CERTIFICATE-----\n";
 
 // =====================================
 // ==      Device Information         ==
@@ -536,7 +567,6 @@ void setRTCAlarmIRQ() {
     M5.Rtc.setAlarmIRQ(nextAlarm.date, nextAlarm.time);
   } else {
     M5.Rtc.disableIRQ();
-    Serial.print("no alarms");
   }
 }
 
@@ -580,15 +610,17 @@ bool connectWiFi() {
 }
 
 // HTTP GET リクエストを実行してレスポンスボディを返す / Perform HTTP GET request and return response
-String connectHTTP(String url) {
-  WiFiClient client;
-  HTTPClient http;
+String connectHTTP(String url, String contentType = "text/plain") {
+  WiFiClientSecure client;
+  client.setCACert(github_root_ca); 
+  HTTPClient https;
+  https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   String body;
-  if (http.begin(client, url)) {
-    //http.addHeader("Content-Type", "application/json");
-    int32_t responseCode = http.GET();
-    body = http.getString();
-    http.end();
+  if (https.begin(client, url)) {
+    https.addHeader("Content-Type", contentType);
+    int32_t responseCode = https.GET();
+    body = https.getString();
+    https.end();
   } else {
     body = "";
   }
@@ -602,7 +634,8 @@ void updateExtOutput(bool active, bool charge) {
 
 // NTP サーバーと同期して RTC 時刻を更新 / Sync RTC with NTP server
 void syncTime() {
-  latestVer = connectHTTP("https://k-7iro.github.io/mk75watch/version.txt").toInt();
+  String latestVerStr = connectHTTP("https://k-7iro.github.io/mk75watch/version.txt");
+  latestVer = latestVerStr.toInt();
   if (latestVer > version) {
     Preferences pref;
     pref.begin("mk75_settings");
@@ -640,11 +673,11 @@ void syncTimeOnSettings() {
   if (WiFi.status() == WL_CONNECTED) {
     M5.Display.println("Wi-Fi Ready");
     syncTime();
+    lastSync = dateTime.date.date+(dateTime.date.month<<5);
   } else {
     M5.Display.println("Wi-Fi Failed");
   }
   dateTime = M5.Rtc.getDateTime();
-  lastSync = dateTime.date.date+(dateTime.date.month<<5);
   WiFi.disconnect(true);
 }
 
