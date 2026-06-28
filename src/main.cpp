@@ -11,7 +11,6 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <esp32_cert_bundle.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <esp_sntp.h>
@@ -45,7 +44,8 @@ typedef enum {
 // UI追加機能タイプ / Additional UI type
 typedef enum {
   UI_NOTHING = 0,
-  UI_TIME = 1
+  UI_TIME = 1,
+  UI_WHEEL = 2
 } uiaddtional_t;
 
 // 時刻UI表示モード / Time display mode for UI
@@ -96,7 +96,7 @@ static M5Canvas cv_stwt4(&cv_display);
 static M5Canvas cv_stwt5(&cv_display);
 static M5Canvas cv_stwt_top(&cv_display);
 
-static M5Canvas cv_timesel(&M5.Display); // 時刻選択UI用Canvas / Canvas for time selection UI
+static M5Canvas cv_uiadditional(&M5.Display); // 時刻選択UI用Canvas / Canvas for time selection UI
 
 // =====================================
 // ==     Global UI & Data Objects    ==
@@ -145,7 +145,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2606140; // [version]
+const uint32_t version = 2606280; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
@@ -893,24 +893,24 @@ void updateDateTimeBat() {
 
 // Draw time/date selection UI with up/down arrow buttons
 void drawTimeUI() {
-  cv_timesel.setFont(&fonts::Font8);
+  cv_uiadditional.setFont(&fonts::Font8);
   if (UIAddtionalSettings == TIMEUI_MODE_DATE) {
-    cv_timesel.drawCenterString(forceDigits(UItimeLeft, 2)+"/"+forceDigits(UItimeRight, 2), 150, 43);
+    cv_uiadditional.drawCenterString(forceDigits(UItimeLeft, 2)+"/"+forceDigits(UItimeRight, 2), 150, 43);
   } else {
-    cv_timesel.drawCenterString(forceDigits(UItimeLeft, 2)+":"+forceDigits(UItimeRight, 2), 150, 43);
+    cv_uiadditional.drawCenterString(forceDigits(UItimeLeft, 2)+":"+forceDigits(UItimeRight, 2), 150, 43);
   }
-  cv_timesel.fillRoundRect(30, 0, 100, 40, 6, TFT_LIGHTGRAY);
-  cv_timesel.fillRoundRect(170, 0, 100, 40, 6, TFT_LIGHTGRAY);
-  cv_timesel.fillRoundRect(30, 125, 100, 40, 6, TFT_LIGHTGRAY);
-  cv_timesel.fillRoundRect(170, 125, 100, 40, 6, TFT_LIGHTGRAY);
-  cv_timesel.fillRect(35, 5, 90, 30, TFT_BLACK);
-  cv_timesel.fillRect(175, 5, 90, 30, TFT_BLACK);
-  cv_timesel.fillRect(35, 130, 90, 30, TFT_BLACK);
-  cv_timesel.fillRect(175, 130, 90, 30, TFT_BLACK);
-  cv_timesel.fillTriangle(80, 10, 40, 30, 120, 30, TFT_WHITE);
-  cv_timesel.fillTriangle(220, 10, 180, 30, 260, 30, TFT_WHITE);
-  cv_timesel.fillTriangle(80, 155, 40, 135, 120, 135, TFT_WHITE);
-  cv_timesel.fillTriangle(220, 155, 180, 135, 260, 135, TFT_WHITE);
+  cv_uiadditional.fillRoundRect(30, 0, 100, 40, 6, TFT_LIGHTGRAY);
+  cv_uiadditional.fillRoundRect(170, 0, 100, 40, 6, TFT_LIGHTGRAY);
+  cv_uiadditional.fillRoundRect(30, 125, 100, 40, 6, TFT_LIGHTGRAY);
+  cv_uiadditional.fillRoundRect(170, 125, 100, 40, 6, TFT_LIGHTGRAY);
+  cv_uiadditional.fillRect(35, 5, 90, 30, TFT_BLACK);
+  cv_uiadditional.fillRect(175, 5, 90, 30, TFT_BLACK);
+  cv_uiadditional.fillRect(35, 130, 90, 30, TFT_BLACK);
+  cv_uiadditional.fillRect(175, 130, 90, 30, TFT_BLACK);
+  cv_uiadditional.fillTriangle(80, 10, 40, 30, 120, 30, TFT_WHITE);
+  cv_uiadditional.fillTriangle(220, 10, 180, 30, 260, 30, TFT_WHITE);
+  cv_uiadditional.fillTriangle(80, 155, 40, 135, 120, 135, TFT_WHITE);
+  cv_uiadditional.fillTriangle(220, 155, 180, 135, 260, 135, TFT_WHITE);
 }
 
 // Prepare clock face graphics (dial, hour hand, minute hand) with selected style
@@ -1130,7 +1130,7 @@ void settings_chooseYear() {
 
 void settings_setYear(String year) {
   UIAddtional = UI_NOTHING;
-  cv_timesel.deleteSprite();
+  cv_uiadditional.deleteSprite();
   m5::rtc_date_t date;
   date.year = year.toInt();
   date.month = dateTime.date.month;
@@ -1151,7 +1151,7 @@ void settings_chooseDate() {
   appUI.linkFunctionToBack(settings_setDate);
   UIAddtional = UI_TIME;
   UIAddtionalSettings = TIMEUI_MODE_DATE;
-  cv_timesel.createSprite(300, 165);
+  cv_uiadditional.createSprite(300, 165);
   UItimeLeft = dateTime.date.month;
   UItimeRight = dateTime.date.date;
   M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
@@ -1161,7 +1161,7 @@ void settings_chooseDate() {
 
 void settings_setDate() {
   UIAddtional = UI_NOTHING;
-  cv_timesel.deleteSprite();
+  cv_uiadditional.deleteSprite();
   m5::rtc_date_t date;
   date.year = dateTime.date.year;
   date.month = UItimeLeft;
@@ -1182,7 +1182,7 @@ void settings_chooseTime() {
   appUI.linkFunctionToBack(settings_setTime);
   UIAddtional = UI_TIME;
   UIAddtionalSettings = TIMEUI_MODE_HOURMIN;
-  cv_timesel.createSprite(300, 165);
+  cv_uiadditional.createSprite(300, 165);
   UItimeLeft = dateTime.time.hours;
   UItimeRight = dateTime.time.minutes;
   M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
@@ -1192,7 +1192,7 @@ void settings_chooseTime() {
 
 void settings_setTime() {
   UIAddtional = UI_NOTHING;
-  cv_timesel.deleteSprite();
+  cv_uiadditional.deleteSprite();
   m5::rtc_time_t time;
   time.hours = UItimeLeft;
   time.minutes = UItimeRight;
@@ -1696,7 +1696,7 @@ void alarm_save() {
 void alarm_setTime() {
   UIAddtional = UI_NOTHING;
   alarm_saved = false;
-  cv_timesel.deleteSprite();
+  cv_uiadditional.deleteSprite();
   alarmJson[alarm_toConfig]["hour"] = UItimeLeft;
   alarmJson[alarm_toConfig]["min"] = UItimeRight;
   setRTCAlarmIRQ();
@@ -1710,7 +1710,7 @@ void alarm_chooseTime() {
   appUI.linkFunctionToBack(alarm_setTime);
   UIAddtional = UI_TIME;
   UIAddtionalSettings = TIMEUI_MODE_HOURMIN;
-  cv_timesel.createSprite(300, 165);
+  cv_uiadditional.createSprite(300, 165);
   UItimeLeft = alarmJson[alarm_toConfig]["hour"];
   UItimeRight = alarmJson[alarm_toConfig]["min"];
   M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
@@ -2126,7 +2126,7 @@ void timer_make() {
   appUI.setTransparentMode(true);
   UIAddtional = UI_TIME;
   UIAddtionalSettings = TIMEUI_MODE_MINSEC;
-  cv_timesel.createSprite(300, 165);
+  cv_uiadditional.createSprite(300, 165);
   UItimeLeft = alarmJson[alarm_toConfig]["hour"];
   UItimeRight = alarmJson[alarm_toConfig]["min"];
   M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
@@ -2137,7 +2137,7 @@ void timer_make() {
 
 void timer_start() {
   UIAddtional = UI_NOTHING;
-  cv_timesel.deleteSprite();
+  cv_uiadditional.deleteSprite();
   uint16_t timerTime = ((UItimeLeft*60) + (UItimeRight));
   timers.push_back((timerTime*1000)+millis());
   timer_init();
@@ -2181,50 +2181,72 @@ void timer_loop() {
   appUI.update(dateTime, battery);
 }
 
-// Ext.Devices
-const uint32_t freq = 100000; // Standard Mode 100kHz
+// random
+uint8_t random_number;
+uint16_t random_degree = 0;
+uint16_t random_speed = 10;
 
-// Variable Length (254 Charactors max)
-String wire_readVLString(uint8_t addr) {
-  uint8_t length = 0;
-  String result = "";
-  M5.Ex_I2C.start(addr, true, freq);
-  M5.Ex_I2C.read(&length, 1);
-  for (uint8_t i; i < length; i++) {
-    uint8_t c;
-    M5.Ex_I2C.read(&c, 1);
-    result += (char) c;
+void random_init();
+void random_loop();
+void random_wheel(String number);
+
+void random_init() {
+  appUI.reset();
+  UIAddtional = UI_NOTHING;
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.setTitle("Random");
+  appUI.addLocaleToTitle("ja", "ランダム");
+  for (uint8_t i = 2; i < 11; i++) {
+    appUI.addItem(String(i), random_wheel, "Wheel "+String(i));
+    appUI.addLocaleToItem(String(i), "ja", "ルーレット "+String(i));
   }
-  M5.Ex_I2C.stop();
-  return result;
+  appUI.linkFunctionToBack(appEnd);
+  appUI.makeUI(lang);
 }
 
+void random_loop() {
+  appUI.update(dateTime, battery);
+  if (UIAddtional == UI_WHEEL) {
+    cv_uiadditional.clear();
+    random_degree = (random_degree+random_speed)%360;
+    random_speed = floor(random_speed*0.95);
+    for (uint8_t i = 0; i < random_number; i++) {
+      cv_uiadditional.fillArc(150, 83, 80, 0, ((int) floor((360.0/(float)random_number)*i)+random_degree)%360, ((int) ceil((360.0/(float)random_number)*(i+1))+random_degree)%360, simpleHueToRgb((360.0/(float)random_number)*i));
+    }
+    cv_uiadditional.fillTriangle(220, 83, 234, 93, 234, 73, TFT_WHITE);
+    cv_uiadditional.pushSprite(centerX-150, centerY-50);
+  }
+}
+
+void random_wheel(String number) {
+  appUI.reset();
+  random_number = number.toInt();
+  appUI.setTitle("Wheel "+number);
+  appUI.addLocaleToTitle("ja", "ルーレット "+number);
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.setTransparentMode(true);
+  UIAddtional = UI_WHEEL;
+  random_speed = random(100, 200); //ここの乱数を平等にしたい
+  M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
+  cv_uiadditional.createSprite(300, 165);
+  appUI.linkFunctionToBack(random_init);
+  appUI.makeUI(lang);
+}
+
+// Ext.Devices
 void edev_init();
 void edev_loop();
 
 void edev_init() {
-  M5.Ex_I2C.begin();
-  //Wire1.setTimeout(10);
   appUI.reset();
   appUI.setLocaleFont("en", 0);
   appUI.setLocaleFont("ja", 1);
   appUI.setTitle("External Devices");
   appUI.addLocaleToTitle("ja", "外部デバイス");
-  appUI.addItem("reload", nothing, "Reload");
-  appUI.addLocaleToItem("reload", "ja", "更新");
-  for (uint8_t i = 8; i < 0x78; i++) {
-    if (M5.Ex_I2C.scanID(i)) {
-      Serial.print("0x");
-      Serial.print(String(i, HEX));
-      Serial.println(" found");
-      appUI.addItem(String(i), nothing, "Device name");
-      appUI.addRightLocaleToItem((String) i, "en", "0x"+String(i, HEX));
-    } else {
-      Serial.print("0x");
-      Serial.print(String(i, HEX));
-      Serial.println(" not found");
-    }
-  }
+  appUI.addItem("reload", nothing, "WIP");
+  appUI.addLocaleToItem("reload", "ja", "開発中");
   appUI.linkFunctionToBack(appEnd);
   appUI.makeUI(lang);
 }
@@ -2643,8 +2665,8 @@ void loopMenuTouch() {
                 nowApp = APP_TRAIN;
                 train_init();
               } else if (i == 4) {
-                //nowApp = APP_RANDOM;
-                //random_init();
+                nowApp = APP_RANDOM;
+                random_init();
               } else if (i == 5) {
                 nowApp = APP_EXT_DEVICE;
                 edev_init();
@@ -2664,7 +2686,6 @@ void loopMenuTouch() {
 
 // Handle time/date picker button input for HH:MM, MM:SS, or MM/DD modes
 void loopTimeSel() {
-  cv_timesel.pushSprite(centerX-150, centerY-50);
   int8_t UItimeLeftMax;
   int8_t UItimeLeftMin;
   int8_t UItimeRightMax;
@@ -2709,6 +2730,7 @@ void loopTimeSel() {
       }
     }
   }
+  cv_uiadditional.pushSprite(centerX-150, centerY-50);
 }
 
 // ======================================
@@ -2794,6 +2816,8 @@ void loop() {
     stopwatch_loop();
   } else if (nowApp == APP_TIMER) {
     timer_loop();
+  } else if (nowApp == APP_RANDOM) {
+    random_loop();
   } else if (nowApp == APP_EXT_DEVICE) {
     edev_loop();
   } else {

@@ -80,3 +80,21 @@ void decombineHex(uint8_t hexValue, uint8_t *lower, uint8_t *upper) {
   *lower = hexValue & 0x0F;
   *upper = (hexValue >> 4) & 0x0F;
 }
+
+uint16_t simpleHueToRgb(int h) { // Powered by Google AI Mode
+    // 360度の範囲に丸める
+    h = h % 360;
+    if (h < 0) h += 360;
+
+    int zone = h / 60;      // 0〜5 の 6つのゾーンに分ける
+    int delta = (h % 60) * 255 / 60; // 60度の中での「増減する量」(0〜255)
+
+    switch (zone) {
+        case 0: return M5.Display.color565(255, delta, 0); // 1. 緑が増える
+        case 1: return M5.Display.color565(255 - delta, 255, 0); // 2. 赤が減る
+        case 2: return M5.Display.color565(0, 255, delta); // 3. 青が増える
+        case 3: return M5.Display.color565(0, 255 - delta, 255); // 4. 緑が減る
+        case 4: return M5.Display.color565(delta, 0, 255); // 5. 赤が増える
+        default: return M5.Display.color565(255, 0, 255 - delta); // 6. 青が減る
+    }
+}
