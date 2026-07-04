@@ -45,7 +45,7 @@ typedef enum {
 typedef enum {
   UI_NOTHING = 0,
   UI_TIME = 1,
-  UI_WHEEL = 2
+  UI_RANDOM = 2
 } uiaddtional_t;
 
 // 時刻UI表示モード / Time display mode for UI
@@ -145,7 +145,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2606280; // [version]
+const uint32_t version = 2607000; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
@@ -242,6 +242,7 @@ bool autoShutdown = true; // 設定可能WIP
 bool doDraw = true;
 bool axp2101 = false;
 bool vibration = false;
+bool showVoltage = false;
 
 uint8_t battery = M5.Power.getBatteryLevel();
 m5::rtc_datetime_t dateTime; // RTC日時情報 / Real-time clock date/time
@@ -970,6 +971,11 @@ void makeClockBase() {
   }
 }
 
+uint16_t getBatteryVoltage() {
+  if (showVoltage) return M5.Power.getBatteryVoltage();
+  return 65535;
+}
+
 // ======================================
 // ===== Application Functions (アプリ関数) =====
 // ======================================
@@ -1014,6 +1020,7 @@ void settings_switchVibration();
 void settings_testNotice();
 void settings_power(String chargeOrBattery);
 void settings_chooseVoltage();
+void settings_switchShowVoltage();
 void settings_setVoltage(String voltage);
 void settings_chooseCurrent();
 void settings_setCurrent(String current);
@@ -1154,7 +1161,7 @@ void settings_chooseDate() {
   cv_uiadditional.createSprite(300, 165);
   UItimeLeft = dateTime.date.month;
   UItimeRight = dateTime.date.date;
-  M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
+  M5.Display.fillRect(0, 65, sizeX, sizeY, TFT_BLACK);
   drawTimeUI();
   appUI.makeUI(lang);
 }
@@ -1185,7 +1192,7 @@ void settings_chooseTime() {
   cv_uiadditional.createSprite(300, 165);
   UItimeLeft = dateTime.time.hours;
   UItimeRight = dateTime.time.minutes;
-  M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
+  M5.Display.fillRect(0, 65, sizeX, sizeY, TFT_BLACK);
   drawTimeUI();
   appUI.makeUI(lang);
 }
@@ -1382,7 +1389,21 @@ void settings_powerChoose() {
   appUI.addLocaleToItem("voltage", "ja", "最大充電電圧");
   appUI.addRightLocaleToItem("voltage", "en", String(fixedChargeVoltage, 1)+"V");
   appUI.addRightLocaleToItem("voltage", "ja", String(fixedChargeVoltage, 1)+"V");
+  appUI.addItem("showvoltage", settings_switchShowVoltage, "Show VBat");
+  appUI.addLocaleToItem("showvoltage", "ja", "電池電圧の表示");
+  appUI.addRightLocaleToItem("showvoltage", "en", boolStr(showVoltage, "Enabled", "Disabled"));
+  appUI.addRightLocaleToItem("showvoltage", "ja", boolStr(showVoltage, "有効", "無効"));
   appUI.makeUI(lang);
+}
+
+void settings_switchShowVoltage() {
+  if (modelType == 2) {
+    showVoltage = !showVoltage;
+    settings_saved = false;
+    appUI.addRightLocaleToItem("showvoltage", "en", boolStr(showVoltage, "Enabled", "Disabled"));
+    appUI.addRightLocaleToItem("showvoltage", "ja", boolStr(showVoltage, "有効", "無効"));
+    appUI.makeUI(lang);
+  }
 }
 
 void settings_chooseCurrent() {
@@ -1391,6 +1412,7 @@ void settings_chooseCurrent() {
   appUI.setLocaleFont("en", 0);
   appUI.setLocaleFont("ja", 1);
   appUI.addLocaleToTitle("ja", "最大充電電流");
+  appUI.linkFunctionToBack(settings_powerChoose);
   appUI.addItem("1", settings_setCurrent, "100mA");
   appUI.addItem("2", settings_setCurrent, "200mA");
   appUI.addItem("3", settings_setCurrent, "300mA");
@@ -1416,6 +1438,7 @@ void settings_chooseVoltage() {
   appUI.setLocaleFont("en", 0);
   appUI.setLocaleFont("ja", 1);
   appUI.addLocaleToTitle("ja", "最大充電電圧");
+  appUI.linkFunctionToBack(settings_powerChoose);
   appUI.addItem("0", settings_setVoltage, "4.0V");
   appUI.addItem("1", settings_setVoltage, "4.1V");
   appUI.addItem("2", settings_setVoltage, "4.2V");
@@ -1576,6 +1599,7 @@ void settings_save() {
     pref.putUChar("dialType", dialType);
     pref.putUChar("charge", combineHex(chargeCurrent, chargeVoltage));
     pref.putUChar("hmi", (vibration << 7)+(speakerVolume*10)+screenBrightness);
+    pref.putBool("showVoltage", showVoltage);
     pref.end();
     appUI.addRightLocaleToItem("save", "en", "Saved");
     appUI.addRightLocaleToItem("save", "ja", "保存済み");
@@ -1585,7 +1609,7 @@ void settings_save() {
 }
 
 void settings_loop() {
-  appUI.update(dateTime, battery);
+  appUI.update(dateTime, battery, getBatteryVoltage());
 }
 
 // Alarm
@@ -1713,7 +1737,7 @@ void alarm_chooseTime() {
   cv_uiadditional.createSprite(300, 165);
   UItimeLeft = alarmJson[alarm_toConfig]["hour"];
   UItimeRight = alarmJson[alarm_toConfig]["min"];
-  M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
+  M5.Display.fillRect(0, 65, sizeX, sizeY, TFT_BLACK);
   drawTimeUI();
   appUI.makeUI(lang);
 }
@@ -1735,7 +1759,7 @@ void alarm_switchWeekend() {
 }
 
 void alarm_loop() {
-  appUI.update(dateTime, battery);
+  appUI.update(dateTime, battery, getBatteryVoltage());
 }
 
 // Stopwatch
@@ -2081,7 +2105,7 @@ void train_loop() {
   if (train_refleshTimer >= 10) {
     train_refleshTimer = 0;
   }
-  appUI.update(dateTime, battery);
+  appUI.update(dateTime, battery, getBatteryVoltage());
 }
 
 // Timer
@@ -2129,7 +2153,7 @@ void timer_make() {
   cv_uiadditional.createSprite(300, 165);
   UItimeLeft = alarmJson[alarm_toConfig]["hour"];
   UItimeRight = alarmJson[alarm_toConfig]["min"];
-  M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
+  M5.Display.fillRect(0, 65, sizeX, sizeY, TFT_BLACK);
   drawTimeUI();
   appUI.linkFunctionToBack(timer_start);
   appUI.makeUI(lang);
@@ -2178,13 +2202,14 @@ void timer_loop() {
     appUI.addLocaleToItem("timer", "en", String((uint8_t) floor((remains)/60))+":"+String((remains)%60));
     appUI.makeUI(lang);
   }
-  appUI.update(dateTime, battery);
+  appUI.update(dateTime, battery, getBatteryVoltage());
 }
 
 // random
 uint8_t random_number;
-uint16_t random_degree = 0;
-uint16_t random_speed = 10;
+uint8_t random_maxNumber;
+uint8_t random_prevNumber;
+uint8_t random_countdown = 0;
 
 void random_init();
 void random_loop();
@@ -2198,23 +2223,32 @@ void random_init() {
   appUI.setTitle("Random");
   appUI.addLocaleToTitle("ja", "ランダム");
   for (uint8_t i = 2; i < 11; i++) {
-    appUI.addItem(String(i), random_wheel, "Wheel "+String(i));
-    appUI.addLocaleToItem(String(i), "ja", "ルーレット "+String(i));
+    appUI.addItem(String(i), random_wheel, "1d"+String(i));
   }
+  appUI.addItem("100", random_wheel, "1d100");
   appUI.linkFunctionToBack(appEnd);
   appUI.makeUI(lang);
 }
 
 void random_loop() {
-  appUI.update(dateTime, battery);
-  if (UIAddtional == UI_WHEEL) {
+  appUI.update(dateTime, battery, getBatteryVoltage());
+  if (UIAddtional == UI_RANDOM) {
     cv_uiadditional.clear();
-    random_degree = (random_degree+random_speed)%360;
-    random_speed = floor(random_speed*0.95);
-    for (uint8_t i = 0; i < random_number; i++) {
-      cv_uiadditional.fillArc(150, 83, 80, 0, ((int) floor((360.0/(float)random_number)*i)+random_degree)%360, ((int) ceil((360.0/(float)random_number)*(i+1))+random_degree)%360, simpleHueToRgb((360.0/(float)random_number)*i));
+    cv_uiadditional.setTextColor(TFT_WHITE, TFT_BLACK);
+    cv_uiadditional.drawCenterString("1d"+String(random_maxNumber), 150, 10, &fonts::Font4);
+    if (M5.Touch.getDetail().wasClicked()) {
+      random_number = random(1, random_maxNumber+1);
+      random_countdown = 10;
+    } else if (random_countdown > 0) {
+      random_countdown--;
+      uint8_t CDNumber = random(1, random_maxNumber);
+      if (CDNumber > random_prevNumber) CDNumber++;
+      cv_uiadditional.setTextColor(TFT_GRAY, TFT_BLACK);
+      cv_uiadditional.drawCenterString(String(CDNumber), 150, 80, &fonts::Font6);
+      random_prevNumber = CDNumber;
+    } else {
+      cv_uiadditional.drawCenterString(String(random_number), 150, 80, &fonts::Font6);
     }
-    cv_uiadditional.fillTriangle(220, 83, 234, 93, 234, 73, TFT_WHITE);
     cv_uiadditional.pushSprite(centerX-150, centerY-50);
   }
 }
@@ -2227,9 +2261,12 @@ void random_wheel(String number) {
   appUI.setLocaleFont("en", 0);
   appUI.setLocaleFont("ja", 1);
   appUI.setTransparentMode(true);
-  UIAddtional = UI_WHEEL;
-  random_speed = random(100, 200); //ここの乱数を平等にしたい
-  M5.Display.fillRect(0, 48, sizeX, sizeY-48, TFT_BLACK);
+  UIAddtional = UI_RANDOM;
+  random_maxNumber = number.toInt();
+  random_number = random(1, random_maxNumber+1);
+  random_prevNumber = random(1, random_maxNumber+1);
+  random_countdown = 10;
+  M5.Display.fillRect(0, 65, sizeX, sizeY, TFT_BLACK);
   cv_uiadditional.createSprite(300, 165);
   appUI.linkFunctionToBack(random_init);
   appUI.makeUI(lang);
@@ -2252,7 +2289,7 @@ void edev_init() {
 }
 
 void edev_loop() {
-  appUI.update(dateTime, battery);
+  appUI.update(dateTime, battery, getBatteryVoltage());
 }
 
 // Draw analog clock face with battery ring and rotating hour/minute hands
@@ -2283,7 +2320,11 @@ void updateDigitals() {
   cv_dtime_bat.setTextColor(TFT_WHITE, TFT_BLACK);
   cv_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
   if (isVbus()) { cv_dtime_bat.setTextColor(CYAN, TFT_BLACK); }
-  cv_dtime_bat.drawRightString(String(battery)+"% - "+String((float) M5.Power.getBatteryVoltage()/1000)+"V", sizeX, 0, &fonts::Font2);
+  if (showVoltage) {
+    cv_dtime_bat.drawRightString(String(battery)+"% - "+String((float) M5.Power.getBatteryVoltage()/1000, 2)+"V", sizeX, 0, &fonts::Font2);
+  } else {
+    cv_dtime_bat.drawRightString(String(battery)+"%", sizeX, 0, &fonts::Font2);
+  }
   cv_day.clear();
   uint8_t dateY;
   bool newVerAvailable = (latestVer > version);
@@ -2512,6 +2553,7 @@ void setupConfigs() {
   String langStr = pref.getString("lang", "en");
   uint32_t slpTime = pref.getUInt("slpTime", 252642565);
   uint8_t slpFlags = pref.getUChar("slpFlags", 7);
+  showVoltage = pref.getBool("showVoltage", false);
   latestVer = pref.getUInt("latestVer", version);
   dialType = (dialtype_t) pref.getUChar("dialType", 0);
   uint8_t chargeSettings = pref.getUChar("charge", 0x23);
