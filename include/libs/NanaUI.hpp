@@ -22,7 +22,7 @@ class UI {
     void setTitle(String title, const char lang[3]);
     void makeUI();
     void makeUI(const char lang[3]);
-    void update(m5::rtc_datetime_t dateTime, uint8_t battery);
+    void update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat);
     void addItem(String id);
     void addItem(String id, String defName);
     void addItem(String id, String defName, String defLang);
@@ -147,7 +147,7 @@ void UI::makeUI(const char lang[3]) {
   }
 }
 
-void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery) {
+void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat) {
   if (firstTouch == 0) {
     uint8_t rowSize = (space*2)+26;
     uint16_t height = M5.Display.height();
@@ -159,7 +159,12 @@ void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery) {
     top_dtime_bat.setTextColor(WHITE, BLACK);
     top_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
     if (M5.Power.Axp2101.isVBUS()) { top_dtime_bat.setTextColor(CYAN, BLACK); }
-    top_dtime_bat.drawRightString(String(battery)+"%", width, 0, &fonts::Font2);
+    if (vbat != 65535) {
+      top_dtime_bat.drawRightString(String(battery)+"% - "+String((float) M5.Power.getBatteryVoltage()/1000, 2)+"V", width, 0, &fonts::Font2);
+    } else {
+      top_dtime_bat.drawRightString(String(battery)+"%", width, 0, &fonts::Font2);
+    }
+    
     top_dtime_bat.pushSprite(0, 0);
     canv.pushSprite(0, tHeight-scroll);
     top.pushSprite(0, 0);
