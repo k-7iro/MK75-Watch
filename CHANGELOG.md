@@ -1,6 +1,13 @@
 # Changelog
 Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Minor Update]`. Some months may be missing. Most updates include minor fixes that are not listed here. The versions listed below are also available from M5Burner. Other development versions are only available from GitHub.
 
+# Ver 26.7
+- Added a "Random App" feature.
+- Updated the update detection mechanism to support HTTPS and fixed a bug that prevented updates from being received.
+- Fixed a bug that prevented navigation back from certain settings screens.
+- Added a setting to toggle the display of battery voltage.
+- Due to various circumstances, the CoreS3 version of V26.7 is not available on M5Burner. Please download it from GitHub or use an older version.
+
 # Ver 26.6
 - You can now set the volume and vibration settings for alarm and timer notifications.
 - You can now change the display brightness in the settings.
@@ -54,6 +61,13 @@ Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Mi
 
 # 変更ログ（日本語）
 バージョン番号は`[年].[月]`または`[年].[月].[マイナーアップデート]`のように表記されます。一部の月は欠番となることがあります。ほとんどのアップデートはここに書かれていない細かなバグ修正を含みます。以下にリストアップされたバージョンはM5Burnerでも使用可能です。ほかの開発バージョンはGitHubからでのみダウンロードできます。
+
+# Ver 26.7
+- ランダムアプリを追加しました。
+- アップデート検知がHTTPSに対応し、アップデートを受け取れないバグを修正しました。
+- 設定の一部項目にて戻ることができないバグを修正しました。
+- 電池電圧の表示のオンオフを設定で変更できるようになりました。
+- 諸事情により、V26.7のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
 
 # Ver 26.6
 - アラームやタイマーの通知のボリューム及び振動の有無が設定できるようになりました。
