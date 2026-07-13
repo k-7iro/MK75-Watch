@@ -145,7 +145,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2607000; // [version]
+const uint32_t version = 2607130; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
@@ -243,6 +243,7 @@ bool doDraw = true;
 bool axp2101 = false;
 bool vibration = false;
 bool showVoltage = false;
+bool lowpower = false;
 
 uint8_t battery = M5.Power.getBatteryLevel();
 m5::rtc_datetime_t dateTime; // RTC日時情報 / Real-time clock date/time
@@ -827,6 +828,8 @@ void lowPowSleep() {
   M5.Display.setBrightness(0);
   M5.Display.sleep();
   M5.Imu.sleep();
+  setCpuFrequencyMhz(80);
+  lowpower = true;
   updateExtOutput(false, charged);
   while (!((touch > 0) or (charged != isVbus()))) {
     dateTime = M5.Rtc.getDateTime();
@@ -855,6 +858,8 @@ void activeSleep() {
   M5.Display.clear();
   M5.Display.setBrightness(0);
   M5.Display.sleep();
+  setCpuFrequencyMhz(80);
+  lowpower = true;
   updateExtOutput(false, charged);
   while (!((touch > 0) or (charged != isVbus()))) {
     compatibleLightSleep(100000, true);
@@ -2232,6 +2237,7 @@ void random_init() {
 
 void random_loop() {
   appUI.update(dateTime, battery, getBatteryVoltage());
+  
   if (UIAddtional == UI_RANDOM) {
     cv_uiadditional.clear();
     cv_uiadditional.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -2655,7 +2661,7 @@ void loopSleep() {
         activeSleep();
       }
       if (isVbus() and !charged) {
-        vibTimer = millis()+500;
+        vibTimer = 500;
         M5.Power.setVibration(127);
       }
       afterSlp = true;
@@ -2692,7 +2698,7 @@ void loopMenuTouch() {
         if (tDetail.wasClicked() and !tDetail.isDragging() and !tDetail.isFlicking() and touchedOnMenu) {
           for (int8_t i = 0; i < howManyApps; i++) {
             if (inLimit(tDetail.x, 225, 315) and inLimit(tDetail.y, (i*120)+75-screenSwipeVertical, (i*120)+165-screenSwipeVertical)) {
-              vibTimer = millis()+200;
+              vibTimer = 200;
               M5.Power.setVibration(127);
               if (i == 0) {
                 nowApp = APP_TIMER;
@@ -2827,17 +2833,21 @@ void loop() {
       }
     }
   }
-  if (vibTimer <= millis())  {
+  if (vibTimer > 0) {
+    M5.Power.setVibration(127);
+    if (vibTimer < prevLoopTime) vibTimer = 0;
+    else vibTimer -= prevLoopTime;
+  } else {
     M5.Power.setVibration(0);
   }
   if (wasVBUS != powered) {
     if (powered) {
-      vibTimer = millis()+500;
+      vibTimer = 500;
       M5.Power.setVibration(127);
     }
     updateExtOutput(true, powered);
   }
-  wasVBUS = isVbus();
+  wasVBUS = powered;
   updateDateTimeBat();
   if (M5.BtnB.wasPressed()) {
     screenSwipe = 0;
@@ -2874,40 +2884,28 @@ void loop() {
         screenSwipe = floor(screenSwipe/2);
     }
     if (doDraw) updateClock();
-    if (doDraw) cv_clock.pushSprite(&cv_display, centerX-ckCenterX-round(screenSwipe/2), centerY-ckCenterY, TFT_BLACK);
     if (doDraw) updateDigitals();
+    if (doDraw) cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
+    if (screenSwipe != 0) {
+      if (doDraw) cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
+    }
+    if (doDraw) cv_clock.pushSprite(&cv_display, centerX-ckCenterX-round(screenSwipe/2), centerY-ckCenterY, TFT_BLACK);
     if (doDraw) cv_day.pushSprite(&cv_display, 1, sizeY-34, TFT_BLACK);
     if (doDraw) cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
     if (screenSwipe != 0) {
-      if (doDraw) drawMenu();
       if (doDraw) cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
     }
-    if (doDraw) cv_display.pushSprite(0, 0);
+    cv_display.pushSprite(0, 0);
     if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && doDraw && !touch) {
-      uint32_t cycleTime = calculateElapsedTime(mainLoopTimer, micros());
-      int32_t slpTime;
-      if (cycleTime < 1000000) {
-        slpTime = 1000000-cycleTime;
-      } else {
-        slpTime = 0;
+      if (!lowpower) {
+        setCpuFrequencyMhz(80);
+        lowpower = true;
       }
-      if (vibTimer > millis()) {
-        uint32_t vibMS = (vibTimer-millis())*1000;
-        if (slpTime > vibMS) {
-          slpTime -= vibMS;
-        } else {
-          slpTime = 0;
-        }
-        compatibleLightSleep(vibMS, true);
-        if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
-          slpTime -= vibMS*1000;
-          vibTimer = 0;
-          M5.Power.setVibration(0);
-        } else {
-          slpTime = 0;
-        }
+    } else {
+      if (lowpower) {
+        setCpuFrequencyMhz(240);
+        lowpower = false;
       }
-      if (slpTime > 0) compatibleLightSleep(slpTime, true);
     }
     mainLoopTimer = micros();
   }
@@ -2921,6 +2919,8 @@ void loop() {
   if (afterSlp) {
     afterSlp = false;
   } else {
-    prevLoopTime = millis()-tmrStart;
+    prevLoopTime = calculateElapsedTime(tmrStart, millis());
+    Serial.println("Loop Time: "+String(prevLoopTime)+"ms");
+    //Serial.println("Vib Time: "+String(vibTimer)+"ms");
   }
 }
