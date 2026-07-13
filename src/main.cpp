@@ -112,6 +112,8 @@ JsonDocument spDatesJson;
 std::list<long> timers;
 WiFiServer server(80);
 String header;
+SemaphoreHandle_t xMutex; // カギの変数
+TaskHandle_t drawTaskHandle = NULL;
 
 #if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3
 SFE_USB SFE(&Serial, &LittleFS);
@@ -2781,6 +2783,24 @@ void loopTimeSel() {
   cv_uiadditional.pushSprite(centerX-150, centerY-50);
 }
 
+void drawTask(void *pvParameters) {
+  uint32_t drawTimer;
+  while(1) {
+    M5.update();
+    drawTimer = millis();
+    loopMenuTouch();
+    // アプリサイドバーの調整
+    if (appMenu) {
+        // 目標値100
+        screenSwipe = ceil((screenSwipe-100)/2)+100;
+    } else {
+        // 目標値0
+        screenSwipe = floor(screenSwipe/2);
+    }
+    vTaskDelay(20 / portTICK_PERIOD_MS);
+  }
+}
+
 // ======================================
 // ===== Arduino Setup & Main Loop ======
 // ======================================
@@ -2806,16 +2826,24 @@ void setup() {
   else slpTimer = sleepTimings_sys[1];
   updateExtOutput(true, powered);
   updateClock();
+  xTaskCreatePinnedToCore(
+    drawTask,       // 実行する関数
+    "drawTask",     // タスクの名前
+    4096,          // メモリサイズ（バイト）
+    NULL,          // 渡す引数
+    0,             // 優先度（数字が大きいほど高い）
+    &drawTaskHandle,          // タスクハンドル
+    0              // コア番号（0 または 1）
+  );
+  xMutex = xSemaphoreCreateMutex();
   mainLoopTimer = micros();
 }
 
 // Main event loop - handles display updates, touch input, app logic, and power management
 void loop() {
   int32_t tmrStart = millis();
-  M5.update();
   //SFE.update();
   doDraw = true;
-  cv_display.clear();
   bool touch = (M5.Touch.getCount() > 0);
   bool powered = isVbus();
   if (doSleep[powered]) {
@@ -2874,39 +2902,31 @@ void loop() {
     edev_loop();
   } else {
     // アプリサイドバーの開閉
-    loopMenuTouch();
-    // アプリサイドバーの調整
-    if (appMenu) {
-        // 目標値100
-        screenSwipe = ceil((screenSwipe-100)/2)+100;
-    } else {
-        // 目標値0
-        screenSwipe = floor(screenSwipe/2);
-    }
-    if (doDraw) updateClock();
-    if (doDraw) updateDigitals();
-    if (doDraw) cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
+    cv_display.clear();
+    updateClock();
+    updateDigitals();
+    cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
     if (screenSwipe != 0) {
-      if (doDraw) cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
+      drawMenu();
     }
-    if (doDraw) cv_clock.pushSprite(&cv_display, centerX-ckCenterX-round(screenSwipe/2), centerY-ckCenterY, TFT_BLACK);
-    if (doDraw) cv_day.pushSprite(&cv_display, 1, sizeY-34, TFT_BLACK);
-    if (doDraw) cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
+    cv_clock.pushSprite(&cv_display, centerX-ckCenterX-round(screenSwipe/2), centerY-ckCenterY, TFT_BLACK);
+    cv_day.pushSprite(&cv_display, 0, sizeY-34, TFT_BLACK);
+    cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
     if (screenSwipe != 0) {
-      if (doDraw) cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
+      cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
     }
     cv_display.pushSprite(0, 0);
-    if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && doDraw && !touch) {
-      if (!lowpower) {
-        setCpuFrequencyMhz(80);
-        lowpower = true;
-      }
-    } else {
-      if (lowpower) {
-        setCpuFrequencyMhz(240);
-        lowpower = false;
-      }
-    }
+    // if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && doDraw && !touch) {
+    //   if (!lowpower) {
+    //     setCpuFrequencyMhz(80);
+    //     lowpower = true;
+    //   }
+    // } else {
+    //   if (lowpower) {
+    //     setCpuFrequencyMhz(240);
+    //     lowpower = false;
+    //   }
+    // }
     mainLoopTimer = micros();
   }
   if (checkAlarmTimer > 10000) {
