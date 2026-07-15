@@ -147,7 +147,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2607130; // [version]
+const uint32_t version = 2607150; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
@@ -200,8 +200,6 @@ int32_t screenSwipeVertical = 0;
 int32_t screenSwipeVerticalFirst = 0;
 int32_t prevTX = 0;
 int32_t prevTY = 0;
-int32_t firstTX = 0;
-int32_t firstTY = 0;
 int32_t cycle = 0;
 int32_t prevLoopTime = 0;
 int32_t prevSwipeAcc[4] = {0, 0, 0, 0};
@@ -221,6 +219,8 @@ uint8_t chargeCurrent = 1;
 uint8_t chargeVoltage = 0;
 uint8_t screenBrightness = 1;
 uint8_t speakerVolume = 1;
+uint8_t chosenAtScroll = 0;
+uint8_t nextChosenAtScroll = 0;
 
 char lang[3];
 uint8_t sleepTimings[4] = {};
@@ -235,7 +235,6 @@ float prevGyro[5] = {0, 0, 0, 0, 0};
 float lastchange = 0;
 
 bool wasVBUS = false;
-bool wasTouched = false;
 bool afterSlp = false;
 bool haveToDeleteAppUI = false;
 bool appMenu = false;
@@ -246,6 +245,8 @@ bool axp2101 = false;
 bool vibration = false;
 bool showVoltage = false;
 bool lowpower = false;
+bool appInit = false;
+bool touchInterrupted = false;
 
 uint8_t battery = M5.Power.getBatteryLevel();
 m5::rtc_datetime_t dateTime; // RTC日時情報 / Real-time clock date/time
@@ -256,7 +257,11 @@ m5::rtc_datetime_t dateTime; // RTC日時情報 / Real-time clock date/time
 
 // ISR callback - signal to skip drawing in current loop cycle
 IRAM_ATTR void touchInterrupt() {
-  doDraw = false;
+  if (nowApp == APP_NOTHING) {
+    doDraw = false;
+    touchInterrupted = true;
+    chosenAtScroll = nextChosenAtScroll;
+  }
 }
 
 void compatibleAttachInterrupt() {
@@ -349,6 +354,7 @@ void appEnd() {
   UIAddtional = UI_NOTHING;
   appUI.reset();
   M5.Speaker.end();
+  touchInterrupted = false;
 }
 
 // 日本の祝日判定 / Check if a given date is a Japanese holiday (powered by ChatGPT)
@@ -770,20 +776,16 @@ void scrollsWhenTouch(m5::touch_detail_t detail, int32_t* target, bool vertical 
   }
   prevTX = detail.x;
   prevTY = detail.y;
-  if (wasTouched) {
-    firstTX = detail.x;
-    firstTY = detail.y;
-  }
 }
 
 // Inertial scroll animation with boundary snapping - decelerates scrolling
-void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, bool useAcc = true) {
+void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, uint8_t* nowChosen, uint8_t* nextChosen, bool useAcc = true, float speed = 2, uint8_t maxAccMulti = 10) {
   if (*target < 0) {
-    *target += (0-*target)/2;
+    *target += (0-*target)/speed;
     *target = round(*target);
     if (abs(*target) <= 1) *target = 0;
   } else if (*target > (indexes-1)*distant) {
-    *target += (((indexes-1)*distant)-*target)/2;
+    *target += (((indexes-1)*distant)-*target)/speed;
     *target = round(*target);
     if (abs(*target-((indexes-1)*distant)) <= 1) *target = ((indexes-1)*distant);
   } else if (*target % distant != 0) {
@@ -795,10 +797,14 @@ void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, bool
         maxAcc = prevSwipeAcc[i];
       }
     }
-    int32_t calib = limit(maxAcc*10, -(distant/2), distant/2);
-    int32_t swipeTarget = limit(round(((float) (*target+calib)/distant))*distant, 0, (indexes-1)*distant);
-    *target += (swipeTarget-*target)/2;
-    if (abs(*target-swipeTarget) <= 1) *target = swipeTarget;
+    int32_t calib = limit(maxAcc*maxAccMulti, -(distant/2), distant/2);
+    *nextChosen = limit(round(((float) (*target+calib)/distant)), 0, indexes-1);
+    int32_t swipeTarget = limit(round(((float) (*target+calib)/distant))*distant, max(0, ((*nowChosen-1)*distant)), min((indexes-1)*distant, ((*nowChosen+1)*distant)));
+    *target += (swipeTarget-*target)/speed;
+    if (abs(*target-swipeTarget) <= 1) {
+      *target = swipeTarget;
+      *nowChosen = *nextChosen;
+    }
   }
   prevTX = -1;
   prevTY = -1;
@@ -1777,6 +1783,8 @@ uint8_t stwt_touchedID = 0;
 uint16_t stwt_touchedTime = 0;
 bool stwt_afterReset = false;
 bool stwt_wasTouched = false;
+uint8_t stwt_chosenAtScroll = 0;
+uint8_t stwt_nextChosenAtScroll = 0;
 
 void stopwatch_redraw(M5Canvas& target, uint8_t id) {
   uint8_t min;
@@ -1837,6 +1845,7 @@ void stopwatch_init() {
   cv_stwt_top.drawString("<", 20, 10, &fonts::Font4);
   cv_stwt_top.pushSprite(0, 17);
   stwt_swipe = 0;
+  stwt_chosenAtScroll = 0;
   stopwatch_make(cv_stwt1, 0);
   stopwatch_make(cv_stwt2, 1);
   stopwatch_make(cv_stwt3, 2);
@@ -1857,6 +1866,7 @@ void stopwatch_loop() {
   if (M5.BtnA.wasPressed()) {
     appEnd();
   } else if (M5.Touch.getCount() > 0 or detail.wasClicked()) {
+    stwt_chosenAtScroll = stwt_nextChosenAtScroll;
     if (detail.y > 64) {
       scrollsWhenTouch(detail, &stwt_swipe);
       if (inLimit(detail.x, (sizeX/2)-85, (sizeX/2)+85) and inLimit(detail.y, (sizeY/2)-60, (sizeY/2)+110) and !stwt_afterReset and (stwt_swipe % sizeX) == 0) {
@@ -1886,7 +1896,7 @@ void stopwatch_loop() {
       }
     }
   } else {
-    scrollsWhenNotTouch(&stwt_swipe, 5, sizeX);
+    scrollsWhenNotTouch(&stwt_swipe, 5, sizeX, &stwt_chosenAtScroll, &stwt_nextChosenAtScroll);
     stwt_wasTouched = false;
     stwt_afterReset = false;
     stwt_touchedTime = 0;
@@ -2682,9 +2692,9 @@ void loopSleep() {
 // Handle menu swipe gestures and app selection
 void loopMenuTouch() {
   if (!afterSlp) {
-    if (M5.Touch.getCount() > 0) {
+    if (M5.Touch.getCount() > 0 || touchInterrupted) {
       m5::Touch_Class::touch_detail_t tDetail = M5.Touch.getDetail();
-      if (tDetail.wasPressed()) {
+      if (touchInterrupted) {
         touchedOnMenu = appMenu;
         for (int8_t i = 0; i < 4; i++) {
           prevSwipeAcc[i] = 0;
@@ -2702,34 +2712,30 @@ void loopMenuTouch() {
             if (inLimit(tDetail.x, 225, 315) and inLimit(tDetail.y, (i*120)+75-screenSwipeVertical, (i*120)+165-screenSwipeVertical)) {
               vibTimer = 200;
               M5.Power.setVibration(127);
+              appInit = true;
+              // アプリ追加するときはここに手を加えよう
               if (i == 0) {
                 nowApp = APP_TIMER;
-                timer_init();
               } else if (i == 1) {
                 nowApp = APP_ALARM;
-                alarm_init();
               } else if (i == 2) {
                 nowApp = APP_STOPWATCH;
-                stopwatch_init();
               } else if (i == 3) {
                 nowApp = APP_TRAIN;
-                train_init();
               } else if (i == 4) {
                 nowApp = APP_RANDOM;
-                random_init();
               } else if (i == 5) {
                 nowApp = APP_EXT_DEVICE;
-                edev_init();
               } else if (i == 6) {
                 nowApp = APP_SETTINGS;
-                settings_init();
               }
             }
           } 
         }
       }
+      touchInterrupted = false;
     } else {
-      scrollsWhenNotTouch(&screenSwipeVertical, howManyApps, 120, false);
+      scrollsWhenNotTouch(&screenSwipeVertical, howManyApps, 120, &chosenAtScroll, &nextChosenAtScroll, false, 5, 10);
     }
   }
 }
@@ -2783,21 +2789,26 @@ void loopTimeSel() {
   cv_uiadditional.pushSprite(centerX-150, centerY-50);
 }
 
-void drawTask(void *pvParameters) {
-  uint32_t drawTimer;
+void touchTask(void *pvParameters) {
+  uint32_t taskTimer;
   while(1) {
-    M5.update();
-    drawTimer = millis();
-    loopMenuTouch();
-    // アプリサイドバーの調整
-    if (appMenu) {
-        // 目標値100
-        screenSwipe = ceil((screenSwipe-100)/2)+100;
-    } else {
-        // 目標値0
-        screenSwipe = floor(screenSwipe/2);
+    taskTimer = millis();
+    if (nowApp == APP_NOTHING) {
+      M5.update();
+      loopMenuTouch();
+      // アプリサイドバーの調整
+      if (appMenu) {
+          // 目標値100
+          screenSwipe = ceil((screenSwipe-100)/1.2)+100;
+      } else {
+          // 目標値0
+          screenSwipe = floor(screenSwipe/1.2);
+      }
     }
-    vTaskDelay(20 / portTICK_PERIOD_MS);
+    uint32_t elapsedTime = calculateElapsedTime(taskTimer, millis());
+    if (elapsedTime < 25) {
+      vTaskDelay(25 - elapsedTime / portTICK_PERIOD_MS);
+    }
   }
 }
 
@@ -2827,12 +2838,12 @@ void setup() {
   updateExtOutput(true, powered);
   updateClock();
   xTaskCreatePinnedToCore(
-    drawTask,       // 実行する関数
-    "drawTask",     // タスクの名前
+    touchTask,       // 実行する関数
+    "touchTask",     // タスクの名前
     4096,          // メモリサイズ（バイト）
     NULL,          // 渡す引数
     0,             // 優先度（数字が大きいほど高い）
-    &drawTaskHandle,          // タスクハンドル
+    NULL,          // タスクハンドル
     0              // コア番号（0 または 1）
   );
   xMutex = xSemaphoreCreateMutex();
@@ -2875,6 +2886,7 @@ void loop() {
     }
     updateExtOutput(true, powered);
   }
+  cv_display.clear();
   wasVBUS = powered;
   updateDateTimeBat();
   if (M5.BtnB.wasPressed()) {
@@ -2886,23 +2898,53 @@ void loop() {
   if (UIAddtional == UI_TIME) {
     loopTimeSel();
   }
+  if (nowApp != APP_NOTHING) {
+    M5.update();
+  }
   if (nowApp == APP_SETTINGS) {
+    if (appInit) {
+      appInit = false;
+      settings_init();
+    }
     settings_loop();
   } else if (nowApp == APP_TRAIN) {
+    if (appInit) {
+      appInit = false;
+      train_init();
+    }
     train_loop();
   } else if (nowApp == APP_ALARM) {
+    if (appInit) {
+      appInit = false;
+      alarm_init();
+    }
     alarm_loop();
   } else if (nowApp == APP_STOPWATCH) {
+    if (appInit) {
+      appInit = false;
+      stopwatch_init();
+    }
     stopwatch_loop();
   } else if (nowApp == APP_TIMER) {
+    if (appInit) {
+      appInit = false;
+      timer_init();
+    }
     timer_loop();
   } else if (nowApp == APP_RANDOM) {
+    if (appInit) {
+      appInit = false;
+      random_init();
+    }
     random_loop();
   } else if (nowApp == APP_EXT_DEVICE) {
+    if (appInit) {
+      appInit = false;
+      edev_init();
+    }
     edev_loop();
   } else {
     // アプリサイドバーの開閉
-    cv_display.clear();
     updateClock();
     updateDigitals();
     cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
@@ -2916,17 +2958,17 @@ void loop() {
       cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
     }
     cv_display.pushSprite(0, 0);
-    // if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && doDraw && !touch) {
-    //   if (!lowpower) {
-    //     setCpuFrequencyMhz(80);
-    //     lowpower = true;
-    //   }
-    // } else {
-    //   if (lowpower) {
-    //     setCpuFrequencyMhz(240);
-    //     lowpower = false;
-    //   }
-    // }
+    if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && doDraw && !touch) {
+      if (!lowpower) {
+        setCpuFrequencyMhz(80);
+        lowpower = true;
+      }
+    } else {
+      if (lowpower) {
+        setCpuFrequencyMhz(240);
+        lowpower = false;
+      }
+    }
     mainLoopTimer = micros();
   }
   if (checkAlarmTimer > 10000) {
@@ -2940,7 +2982,7 @@ void loop() {
     afterSlp = false;
   } else {
     prevLoopTime = calculateElapsedTime(tmrStart, millis());
-    Serial.println("Loop Time: "+String(prevLoopTime)+"ms");
+    //Serial.println("Loop Time: "+String(prevLoopTime)+"ms");
     //Serial.println("Vib Time: "+String(vibTimer)+"ms");
   }
 }

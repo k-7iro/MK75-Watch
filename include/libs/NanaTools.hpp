@@ -67,6 +67,7 @@ String successOrFail(bool target) {
   return "Failed";
 }
 
+// endにはmillis()やmicros()を入れるといいでしょう。
 uint32_t calculateElapsedTime(uint32_t start, uint32_t end) {
   if (end >= start) return end - start;
   return (UINT32_MAX - start) + end + 1;
