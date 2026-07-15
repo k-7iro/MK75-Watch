@@ -145,7 +145,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2607130; // [version]
+const uint32_t version = 2607140; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
@@ -2883,6 +2883,7 @@ void loop() {
         // 目標値0
         screenSwipe = floor(screenSwipe/2);
     }
+    if (doDraw) drawMenu();
     if (doDraw) updateClock();
     if (doDraw) updateDigitals();
     if (doDraw) cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
@@ -2895,7 +2896,7 @@ void loop() {
     if (screenSwipe != 0) {
       if (doDraw) cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
     }
-    cv_display.pushSprite(0, 0);
+    if (doDraw) cv_display.pushSprite(0, 0);
     if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && doDraw && !touch) {
       if (!lowpower) {
         setCpuFrequencyMhz(80);
@@ -2920,7 +2921,7 @@ void loop() {
     afterSlp = false;
   } else {
     prevLoopTime = calculateElapsedTime(tmrStart, millis());
-    Serial.println("Loop Time: "+String(prevLoopTime)+"ms");
+    //Serial.println("Loop Time: "+String(prevLoopTime)+"ms");
     //Serial.println("Vib Time: "+String(vibTimer)+"ms");
   }
 }
