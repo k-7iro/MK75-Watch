@@ -35,7 +35,55 @@ MK75-Watch (It's called Maker Seventy-Five Watch) is a smartwatch/multi-function
 To use it as a smartwatch, you will also need a [Watch Development Kit w/ Orange Strap (Excluding Core) v1.1](https://shop.m5stack.com/products/watch-development-kit-w-orange-strap-excluding-core-v1-1) (sold separately).
 
 ## How to Use
-WIP
+
+### First boot
+On the first boot (when `/wifi.json` is missing), the watch opens **Wi-Fi Setup**.
+
+1. Connect your phone or computer to the Wi-Fi network **MK75-Setup** (no password).
+2. A setup page should open by itself (captive portal). If it does not, scan the QR code on the watch, or open http://192.168.10.75/ .
+3. Pick an SSID from the list, or type it (needed for hidden networks). Enter the password and tap **Connect**.
+4. Watch the watch screen. If it fails, it will return to setup so you can try again.
+
+You can **Skip** from the phone page, or by tapping **Skip / スキップ** on the right side of the watch (Core2: button A also skips). Time can be set later in **Settings → Date and Time**.
+
+To add or change Wi-Fi later, open **Settings → Wi-Fi Setup**. A successful connection is merged into `wifi.json` (other saved networks are kept).
+
+### Clock
+- The analog dial is the home screen. Battery is the arc around the dial (cyan while charging).
+- Date, time, and battery % are at the top and bottom. Special dates from `special_dates.json` rotate on the bottom line. If a newer firmware is known, **Update Available** is shown there in red.
+- Open the app list by touching the left side of the screen (the dial). The list slides in from the right; swipe it vertically and tap an icon.
+- Close an app with the red **&lt;** at the top left, or Core2 button A. Button B returns to the clock.
+
+### Apps
+| App | What it does |
+| ---- | ---- |
+| Timer | Countdown. Add one, set minutes:seconds, it rings like the alarm. |
+| Alarm | Multiple alarms. Weekday / weekend on or off. Save after editing. Still rings after shutdown (RTC wake). |
+| Stopwatch | Five stopwatches. Swipe sideways. Tap to start/stop, hold about 1 second to reset. |
+| TrainTime | Next 3 trains/buses from `train.json`. Switch weekday/holiday and clock vs remaining minutes. |
+| Random | Dice: 1d2 … 1d10 and 1d100. Tap the number to roll again. |
+| Ext.Device | Not implemented yet (placeholder). |
+| Settings | Language, power/sleep, Wi-Fi, date/time, display, notices, version. Tap **Save** or changes are lost. |
+
+### Sleep and power
+- After idle, the screen sleeps (timing is in **Power Settings**, separately for charging vs battery).
+- Short-press the power button to sleep or wake. On battery, tilting the watch (gyro) can also wake it.
+- If it sits still for a long time with no timer running, it may shut down to save power. Alarms can still wake it.
+
+### Data files (LittleFS / SD)
+At boot, files in the SD card folder `/littlefs/` are copied onto internal LittleFS (same filenames).
+
+| File | Role |
+| ---- | ---- |
+| `wifi.json` | `{"SSID":"password", ...}`. If this file is missing, Wi-Fi Setup runs. |
+| `train.json` | Timetables. `timetable` → station name → `weekdays` / `weekends` → hour (`"6"` … `"23"`) → list of `{"m": minute, "t": type, "d": destination}`. `color` maps type name to `[R,G,B]`. |
+| `alarm.json` | Alarm list. Written by the Alarm app. |
+| `special_dates.json` | `{"1":{"1":[{"name":"Happy New Year!","color":16398158}]}}` — month → day → list of name + 24-bit color. |
+
+Sample files live in the `data/` folder of this repository.
+
+### Language
+Japanese and English. Change it in Settings. For other languages, please open a GitHub Issue.
 
 ## Notes
 - The M5Stack is not waterproof. Do not take it outside on rainy days.
@@ -98,7 +146,55 @@ MK75-Watch（メイカーセブンティファイブウォッチと読んでく�
 スマートウォッチとして使用するには、別売りの[ウォッチデバイス化キット](https://ssci.to/9492)も必要です。また、別売りの画面保護フィルム（[Basic/Fire用](https://www.amazon.co.jp/dp/B07KF5KWJP)・[Core2用](https://www.amazon.co.jp/dp/B08HMQW367)・[CoreS3用](https://www.amazon.co.jp/dp/B0C4XVTVV8)）も同時に購入することを強くお勧めします。3Dプリンターをお持ちの場合は、カバーを印刷し装着することをお勧めします。
 
 ## 使い方
-後日記載
+
+### 初回起動
+初回起動時（`/wifi.json` が無いとき）は **Wi-Fi設定** が開きます。
+
+1. スマホやPCを、パスワードなしのWi-Fi **MK75-Setup** に接続します。
+2. 設定ページが自動で開きます（キャプティブポータル）。開かないときは時計のQRコードを読むか、http://192.168.10.75/ を開いてください。
+3. SSIDを一覧から選ぶか、直接入力します（隠しSSIDは直接入力）。パスワードを入れて **接続** を押します。
+4. 時計の画面を見てください。失敗すると設定に戻るので、やり直できます。
+
+スマホのページから **スキップ** するか、時計右下の **Skip / スキップ** をタップしても進めます（Core2はボタンAでもスキップ）。時刻はあとから **設定 → 日付と時刻** で合わせられます。
+
+あとからWi-Fiを足したり変えたりするときは **設定 → Wi-Fi設定** を使います。接続に成功したSSIDは `wifi.json` に追記され、他の登録はそのまま残ります。
+
+### 時計画面
+- アナログ文字盤がホームです。電池残量は文字盤の弧（充電中はシアン）です。
+- 時刻・日付・電池%は上下に出ます。`special_dates.json` の記念日は下の行で順番に表示されます。新しいファームが分かっているときは、そこに赤い **Update Available** も出ます。
+- アプリ一覧は画面左（文字盤）をタッチすると右から出ます。縦にスワイプしてアイコンをタップします。
+- アプリを閉じるときは左上の赤い **&lt;**、またはCore2のボタンAです。ボタンBで時計に戻ります。
+
+### アプリ
+| アプリ | 内容 |
+| ---- | ---- |
+| タイマー | カウントダウン。分:秒でセット。鳴り方はアラームと同じです。 |
+| アラーム | 複数登録。平日/休日のオンオフ。編集したら保存してください。電源オフ中もRTCで鳴ります。 |
+| ストップWt | 5本。横スワイプ。タップで開始/停止、約1秒長押しでリセット。 |
+| 交通時刻表 | `train.json` から次の3本。平日/休日と、時刻表示/残り分を切り替えできます。 |
+| ランダム | 1d2〜1d10と1d100。出た数字をタップすると再ロール。 |
+| 外部デバイス | 未実装です（プレースホルダ）。 |
+| 設定 | 言語、電源/スリープ、Wi-Fi、日付と時刻、画面、通知、バージョン。**保存** を押さないと消えません。 |
+
+### スリープと電源
+- 操作しないでいると画面がスリープします（時間は **電源設定** で、充電時と電池時それぞれ）。
+- 電源ボタン短押しでスリープ/解除。電池動作時は傾けても起きることがあります（ジャイロ）。
+- 長く置いたままでタイマーが無いと、節電のためシャットダウンすることがあります。アラームでは起動します。
+
+### データファイル（LittleFS / SD）
+起動時、SDカードの `/littlefs/` にあるファイルが内蔵LittleFSへ同名でコピーされます。
+
+| ファイル | 役割 |
+| ---- | ---- |
+| `wifi.json` | `{"SSID":"password", ...}`。このファイルが無いとWi-Fi設定が走ります。 |
+| `train.json` | 時刻表。`timetable` → 駅名 → `weekdays` / `weekends` → 時（`"6"` … `"23"`）→ `{"m": 分, "t": 種別, "d": 行先}` の配列。`color` は種別名 → `[R,G,B]`。 |
+| `alarm.json` | アラーム一覧。アラームアプリが書き込みます。 |
+| `special_dates.json` | `{"1":{"1":[{"name":"Happy New Year!","color":16398158}]}}` — 月 → 日 → 名前と24bit色の配列。 |
+
+リポジトリの `data/` にサンプルがあります。
+
+### 言語
+日本語と英語。設定から切り替えます。ほかの言語が必要な場合はGitHubのIssueで知らせてください。
 
 ## 注意点
 - M5Stackに防水機能は全くありません。雨の日に外に持ち出さないでください。

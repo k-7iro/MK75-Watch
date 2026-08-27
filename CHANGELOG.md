@@ -1,6 +1,12 @@
 # Changelog
 Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Minor Update]`. Some months may be missing. Most updates include minor fixes that are not listed here. The versions listed below are also available from M5Burner. Other development versions are only available from GitHub.
 
+# Ver 26.8
+- Replaced the first-boot Wi-Fi setup: captive portal (the phone should open the page by itself), URL-encoded SSID/password (spaces and symbols no longer break setup), hidden SSID typing, skip, Japanese/English page, and retry from Settings.
+- Wi-Fi Setup no longer wipes other saved networks when you add one.
+- After first-boot Wi-Fi setup, timetable / alarm / special-date files are loaded without needing a reboot.
+- Added a "How to Use" section to the README.
+
 # Ver 26.7
 - Added a "Random App" feature.
 - Updated the update detection mechanism to support HTTPS and fixed a bug that prevented updates from being received.

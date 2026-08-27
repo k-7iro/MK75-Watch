@@ -12,6 +12,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <DNSServer.h>
 #include <ArduinoJson.h>
 #include <esp_sntp.h>
 #include <Preferences.h>
@@ -145,7 +146,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2607000; // [version]
+const uint32_t version = 2608000; // [version]
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
@@ -997,7 +998,9 @@ void beep() {
 
 void powerOff() { M5.Power.powerOff(); }
 
+void wifiInitialSetup(bool firstBoot = true);
 void settings_init();
+void settings_wifiSetup();
 void settings_chooseLang();
 void settings_setLang(String langTarget);
 void settings_dateTime();
@@ -1078,6 +1081,8 @@ void settings_init() {
   appUI.addLocaleToItem("power", "ja", "電源設定");
   appUI.addItem("time", settings_dateTime, "Date and Time");
   appUI.addLocaleToItem("time", "ja", "日付と時刻");
+  appUI.addItem("wifi", settings_wifiSetup, "Wi-Fi Setup");
+  appUI.addLocaleToItem("wifi", "ja", "Wi-Fi設定");
   appUI.addItem("display", settings_display, "Display and Visuals");
   appUI.addLocaleToItem("display", "ja", "ディスプレイと外観");
   appUI.addItem("notice", settings_notice, "Notices");
@@ -1101,6 +1106,11 @@ void settings_setLang(String langTarget) {
   lang[0] = langTarget.charAt(0);
   lang[1] = langTarget.charAt(1);
   settings_saved = false;
+  settings_init();
+}
+
+void settings_wifiSetup() {
+  wifiInitialSetup(false);
   settings_init();
 }
 
@@ -2414,10 +2424,12 @@ bool copySDtoSPI() {
   }
 }
 
-void wifiInitialSetup() {
+void wifiInitialSetup(bool firstBoot) {
   bool notConnected = true;
+  bool skipped = false;
   String trySSID = "";
   String tryPass = "";
+  DNSServer dnsServer;
   while (notConnected) {
     M5.Display.clear();
     M5.Display.setCursor(0, 0);
@@ -2427,76 +2439,97 @@ void wifiInitialSetup() {
     M5.Display.setFont(&fonts::Font2);
     if (!trySSID.isEmpty()) {
       M5.Display.setTextColor(RED, TFT_BLACK);
-      M5.Display.println("Failed to Connect "+trySSID+".");
+      M5.Display.println("Failed: " + trySSID);
+      M5.Display.println("接続失敗: " + trySSID);
     }
     M5.Display.setTextColor(WHITE, TFT_BLACK);
-    M5.Display.println("1. Connect to Wi-Fi \"MK75-Setup\" using your smartphone or computer.");
-    M5.Display.println("2. Scan the QR code or access the URL.");
-    M5.Display.println("3. Follow the on-screen instructions.");
+    M5.Display.println("1. Join Wi-Fi \"MK75-Setup\"");
+    M5.Display.println("   「MK75-Setup」へ接続");
+    M5.Display.println("2. Wait for the login page, or scan QR");
+    M5.Display.println("   ログイン画面 / QRコード");
     String SSIDs = "";
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect(false, false);
+    delay(100);
     int32_t n = WiFi.scanNetworks();
     for (int32_t i = 0; i < n; i++) {
-      SSIDs += "<option>";
-      SSIDs += WiFi.SSID(i);
+      String name = htmlEscape(WiFi.SSID(i));
+      SSIDs += "<option value=\"";
+      SSIDs += name;
+      SSIDs += "\">";
+      SSIDs += name;
       SSIDs += "</option>";
     }
+    WiFi.mode(WIFI_AP);
+    WiFi.softAPConfig(ip, ip, subnet);
     WiFi.softAP("MK75-Setup");
     delay(100);
-    WiFi.softAPConfig(ip, ip, subnet);
-    IPAddress myIP = WiFi.softAPIP();
+    dnsServer.start(53, "*", ip);
     server.begin();
     M5.Display.setTextColor(YELLOW, TFT_BLACK);
-    M5.Display.println("http://192.168.10.75/wifi-setup/");
+    M5.Display.println("http://192.168.10.75/");
     M5.Display.fillRect(0, sizeY-120, 120, 120, WHITE);
-    M5.Display.qrcode("http://192.168.10.75/wifi-setup/", 10, sizeY-110, 100, 2);
+    M5.Display.qrcode("http://192.168.10.75/", 10, sizeY-110, 100, 2);
+    M5.Display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    M5.Display.drawCenterString("Skip", 220, sizeY-70, &fonts::Font4);
+    M5.Display.drawCenterString("スキップ", 220, sizeY-42, &fonts::efontJA_16);
     bool notSSIDReady = true;
     while (notSSIDReady) {
+      dnsServer.processNextRequest();
+      M5.update();
+      m5::touch_detail_t skipTouch = M5.Touch.getDetail();
+      if (M5.BtnA.wasPressed() || (skipTouch.wasClicked() && skipTouch.x >= 140 && skipTouch.y >= sizeY-90)) {
+        skipped = true;
+        notSSIDReady = false;
+        notConnected = false;
+        break;
+      }
       WiFiClient client = server.available();
       if (client) {
         client.setTimeout(1000);
         String request = client.readStringUntil('\n');
-        // Serial.println(request);
         while (client.available()) client.read();
         if (request.endsWith("\r")) request = request.substring(0, request.length()-1);
-        std::list<String> reqSplit = split(request, ' ');
-        std::list<String>::iterator reqSplitItr = reqSplit.begin();
-        if (*reqSplitItr == "GET") {
-          reqSplitItr++;
-          std::list<String> dirSplit = split(*reqSplitItr, '/');
-          std::list<String>::iterator dirSplitItr = dirSplit.begin();
-          uint32_t dirSplitLength = dirSplit.size();
-          // Serial.println(*dirSplitItr);
-          // Serial.println(dirSplitLength);
-          if (dirSplitLength == 0) {
-            client.print(Error404);
-          } else if (*dirSplitItr == "wifi-setup") {
-            if (dirSplitLength == 1) {
-              client.print(WiFiSetForm(false, SSIDs));
-            } else {
-              dirSplitItr++;
-              client.print(WiFiSetForm(true, ""));
-              notSSIDReady = false;
-              trySSID = *dirSplitItr;
-              if (dirSplitLength != 2) {
-                dirSplitItr++;
-                tryPass = *dirSplitItr;
-              }
-            }
+        int32_t firstSpace = request.indexOf(' ');
+        int32_t secondSpace = request.indexOf(' ', firstSpace + 1);
+        String method = (firstSpace > 0) ? request.substring(0, firstSpace) : "";
+        String path = (firstSpace > 0 && secondSpace > firstSpace) ? request.substring(firstSpace + 1, secondSpace) : "/";
+        String route = path;
+        String query = "";
+        int32_t qpos = path.indexOf('?');
+        if (qpos >= 0) {
+          route = path.substring(0, qpos);
+          query = path.substring(qpos + 1);
+        }
+        if (method == "GET" && route == "/connect") {
+          client.print(WiFiSetForm(true, ""));
+          if (getQueryParam(query, "skip") == "1") {
+            skipped = true;
+            notSSIDReady = false;
+            notConnected = false;
           } else {
-            client.print(Error404);
+            trySSID = getQueryParam(query, "ssid");
+            tryPass = getQueryParam(query, "pass");
+            if (!trySSID.isEmpty()) notSSIDReady = false;
           }
+        } else if (method == "GET") {
+          client.print(WiFiSetForm(false, SSIDs));
+        } else {
+          client.print(Error404);
         }
         client.stop();
         long disconWaitTimer = millis();
         while ((client.connected() and (millis()-disconWaitTimer) <= 10000)) {
-          delay(100);
+          dnsServer.processNextRequest();
+          delay(50);
         }
-        if (client.connected()) continue;
       }
     }
     server.end();
-    WiFi.disconnect(false);
+    dnsServer.stop();
+    WiFi.softAPdisconnect(true);
     delay(100);
+    if (skipped) break;
     M5.Display.clear();
     M5.Display.setCursor(0, 0);
     M5.Display.setFont(&fonts::Font4);
@@ -2504,30 +2537,45 @@ void wifiInitialSetup() {
     M5.Display.println("Wi-Fi Setup");
     M5.Display.setFont(&fonts::Font2);
     M5.Display.setTextColor(WHITE, TFT_BLACK);
-    M5.Display.println("Connecting "+trySSID+"...");
+    M5.Display.println("Connecting " + trySSID + "...");
+    M5.Display.println(trySSID + " に接続中...");
+    WiFi.mode(WIFI_STA);
     long wifiTimer = millis();
     WiFi.begin(trySSID, tryPass);
     while (!(WiFi.status() == WL_CONNECTED or (millis()-wifiTimer) > 10000)) {
       delay(1000);
-      // Serial.print(".");
     }
     if (WiFi.status() == WL_CONNECTED) notConnected = false;
   }
-  M5.Display.println("Successed. Saving Wi-Fi Settings...");
-  wifiJson.clear();
+  if (skipped) {
+    M5.Display.clear();
+    M5.Display.setCursor(0, 0);
+    M5.Display.setFont(&fonts::Font2);
+    M5.Display.setTextColor(WHITE, TFT_BLACK);
+    M5.Display.println("Skipped Wi-Fi setup.");
+    M5.Display.println("Wi-Fi設定をスキップしました。");
+    if (firstBoot) {
+      wifiJson.clear();
+      wifiJson.to<JsonObject>();
+      writeSPIJson("/wifi.json", &wifiJson);
+      M5.Display.println("Set the time later in Settings.");
+      M5.Display.println("時刻は設定から合わせられます。");
+    }
+    WiFi.mode(WIFI_OFF);
+    delay(1000);
+    return;
+  }
+  M5.Display.println("Connected. Saving...");
+  M5.Display.println("接続成功。保存しています...");
+  if (!wifiJson.is<JsonObject>()) wifiJson.to<JsonObject>();
   wifiJson[trySSID] = tryPass;
   writeSPIJson("/wifi.json", &wifiJson);
-  M5.Display.println("Finished. Syncing time...");
-  // Serial.println(WiFi.status());
+  M5.Display.println("Syncing time...");
+  M5.Display.println("時刻を同期しています...");
   syncTime();
   M5.Display.println("Finished.");
+  M5.Display.println("完了。");
   WiFi.disconnect(true);
-  String langStr = "en";
-  uint32_t slpTime = 252642565;
-  uint8_t slpFlags = 7;
-  dialType = (dialtype_t) 0;
-  lang[0] = langStr.charAt(0);
-  lang[1] = langStr.charAt(1);
   delay(1000);
 }
 
@@ -2589,21 +2637,24 @@ void setupConfigs() {
   M5.Display.print("Loading wifi json...");
   bool wifiJsonAvailable = readSPIJson("/wifi.json", &wifiJson, 10000);
   M5.Display.println(successOrFail(wifiJsonAvailable));
-  if (wifiJsonAvailable) {
-    M5.Display.print("Loading train json...");
-    M5.Display.println(successOrFail(readSPIJson("/train.json", &trainJson, 10000)));
-    M5.Display.print("Loading alarm json...");
-    M5.Display.println(successOrFail(readSPIJson("/alarm.json", &alarmJson, 10000)));
-    setRTCAlarmIRQ();
-    M5.Display.print("Loading special dates json...");
-    M5.Display.println(successOrFail(readSPIJson("/special_dates.json", &spDatesJson, 10000)));
+  if (!wifiJsonAvailable) {
     delay(1000);
-    checkAlarm();
-    M5.Display.clear();
-  } else {
-    delay(1000);
-    wifiInitialSetup();
+    wifiInitialSetup(true);
+    M5.Display.fillScreen(TFT_BLACK);
+    M5.Display.setCursor(0, 0);
+    M5.Display.setFont(&fonts::Font2);
+    M5.Display.setTextColor(WHITE, TFT_BLACK);
   }
+  M5.Display.print("Loading train json...");
+  M5.Display.println(successOrFail(readSPIJson("/train.json", &trainJson, 10000)));
+  M5.Display.print("Loading alarm json...");
+  M5.Display.println(successOrFail(readSPIJson("/alarm.json", &alarmJson, 10000)));
+  setRTCAlarmIRQ();
+  M5.Display.print("Loading special dates json...");
+  M5.Display.println(successOrFail(readSPIJson("/special_dates.json", &spDatesJson, 10000)));
+  delay(1000);
+  checkAlarm();
+  M5.Display.clear();
 }
 
 void setupSprites() {

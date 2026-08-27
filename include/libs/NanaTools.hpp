@@ -6,6 +6,7 @@
 #pragma once
 #include <M5Unified.h>
 #include <list>
+#include <stdlib.h>
 
 void nothing() {}
 
@@ -31,6 +32,48 @@ String forceDigits(int num, int digits) {
     }
   }
   return result;
+}
+
+String urlDecode(String s) {
+  String result;
+  result.reserve(s.length());
+  for (unsigned i = 0; i < s.length(); i++) {
+    char c = s.charAt(i);
+    if (c == '+') {
+      result += ' ';
+    } else if (c == '%' && i + 2 < s.length()) {
+      String hex = s.substring(i + 1, i + 3);
+      result += (char) strtol(hex.c_str(), nullptr, 16);
+      i += 2;
+    } else {
+      result += c;
+    }
+  }
+  return result;
+}
+
+String getQueryParam(String query, String key) {
+  String prefix = key + "=";
+  int start = 0;
+  while (start <= (int) query.length()) {
+    int amp = query.indexOf('&', start);
+    if (amp < 0) amp = query.length();
+    String pair = query.substring(start, amp);
+    if (pair.startsWith(prefix)) {
+      return urlDecode(pair.substring(prefix.length()));
+    }
+    start = amp + 1;
+    if (amp == (int) query.length()) break;
+  }
+  return "";
+}
+
+String htmlEscape(String s) {
+  s.replace("&", "&amp;");
+  s.replace("<", "&lt;");
+  s.replace(">", "&gt;");
+  s.replace("\"", "&quot;");
+  return s;
 }
 
 std::list<String> split(String sentence, char denim) {
