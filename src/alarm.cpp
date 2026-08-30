@@ -45,7 +45,7 @@ void alarm_init() {
     int32_t min = loopAlarm["min"];
     bool enabled = loopAlarm["weekday"] || loopAlarm["weekend"];
     appUI.addItem(String(cnt), alarm_config, forceDigits(hour, 2)+":"+forceDigits(min, 2));
-    if (enabled) appUI.setItemColor(String(cnt), TFT_GRAY);
+    if (!enabled) appUI.setItemColor(String(cnt), TFT_GRAY);
     cnt++;
   }
   alarm_count = cnt;

@@ -1,6 +1,13 @@
 # Changelog
 Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Minor Update]`. Some months may be missing. Most updates include minor fixes that are not listed here. The versions listed below are also available from M5Burner. Other development versions are only available from GitHub.
 
+# Ver 26.8
+- Removed the Wi-Fi setup wizard; Wi-Fi can now be configured via the serial monitor.
+- Added a "one-time" setting for alarms. Consequently, alarms disabled for both weekdays and weekends are now displayed in gray.
+- Slightly modified touch handling (implemented multi-core processing).
+- Split the bloated source code into smaller files.
+
+
 # Ver 26.7
 - Added a "Random App" feature.
 - Updated the update detection mechanism to support HTTPS and fixed a bug that prevented updates from being received.
@@ -61,6 +68,12 @@ Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Mi
 
 # 変更ログ（日本語）
 バージョン番号は`[年].[月]`または`[年].[月].[マイナーアップデート]`のように表記されます。一部の月は欠番となることがあります。ほとんどのアップデートはここに書かれていない細かなバグ修正を含みます。以下にリストアップされたバージョンはM5Burnerでも使用可能です。ほかの開発バージョンはGitHubからでのみダウンロードできます。
+
+# Ver 26.8
+- Wi-Fiのセットアップを削除し、シリアルモニタ経由でWi-Fiを登録可能にしました。
+- アラームにワンタイム設定を追加しました。それに伴い平日休日共に無効のアラームはグレーアウトして表示されるようになりました。
+- タッチの仕様を若干変更しました。（マルチコア化）
+- 肥大化したソースコードを分割しました。
 
 # Ver 26.7
 - ランダムアプリを追加しました。

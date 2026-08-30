@@ -127,3 +127,7 @@ extern M5Canvas cv_dtime_bat;
 extern void updateDateTimeBat();
 extern void scrollsWhenTouch(m5::touch_detail_t detail, int32_t* target, bool vertical = false);
 extern void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, bool useAcc = true, float speed = 2, uint8_t maxAccMulti = 10);
+
+// [初期設定用]
+extern JsonDocument wifiJson;
+extern bool wifiJsonAvailable;
