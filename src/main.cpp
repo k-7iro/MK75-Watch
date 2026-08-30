@@ -1381,7 +1381,7 @@ void loop() {
     if (screenSwipe != 0) {
       cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
     }
-    cv_display.pushSprite(0, 0);
+    if (doDraw) cv_display.pushSprite(0, 0);
     if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && doDraw && !touch) {
       if (!lowpower) {
         setCpuFrequencyMhz(80);
@@ -1407,6 +1407,7 @@ void loop() {
     afterSlp = false;
   } else {
     prevLoopTime = calculateElapsedTime(tmrStart, millis());
+    //Serial.println("Loop Time: "+String(prevLoopTime)+"ms");
     //Serial.println("Loop Time: "+String(prevLoopTime)+"ms");
     //Serial.println("Vib Time: "+String(vibTimer)+"ms");
   }
