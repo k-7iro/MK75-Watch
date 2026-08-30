@@ -23,50 +23,8 @@
 #include "libs/NanaTools.hpp"
 #include "libs/NanaDrawPlus.hpp"
 #include "libs/SerialFileEdit.hpp"
+#include "main.hpp"
 #include "new"
-
-// ======================================
-// == Application & UI Type Definitions ==
-// ======================================
-
-// アプリケーションタイプ / Application type enumeration
-typedef enum {
-  APP_NOTHING = 0,
-  APP_ALARM = 1,
-  APP_TIMER = 2,
-  APP_STOPWATCH = 3,
-  APP_TRAIN = 4,
-  APP_EXT_DEVICE = 5,
-  APP_RANDOM = 6,
-  APP_SETTINGS = 7
-} apptype_t;
-
-// UI追加機能タイプ / Additional UI type
-typedef enum {
-  UI_NOTHING = 0,
-  UI_TIME = 1,
-  UI_RANDOM = 2
-} uiaddtional_t;
-
-// 時刻UI表示モード / Time display mode for UI
-typedef enum {
-  TIMEUI_MODE_HOURMIN = 0,
-  TIMEUI_MODE_MINSEC = 1,
-  TIMEUI_MODE_DATE = 2
-} uiaddsettings_t;
-
-// 外部デバイス電源制御設定 / External device power control settings
-typedef enum {
-  EXT_POWER_ALWAYS = 0,
-  EXT_POWER_ACTIVE = 1,
-  EXT_POWER_NEVER = 2
-} extsettings_t;
-
-// 時計盤デザインタイプ / Dial type for clock display
-typedef enum {
-  DIAL_ZERODIAL = 0,
-  DIAL_CLASSIC = 1
-} dialtype_t;
 
 #define NTP_TIMEZONE "JST-9" // 日本標準時 / Japan Standard Time (UTC+9) in seconds
 #define NTP_SERVER1 "ntp.nict.jp"
@@ -79,24 +37,24 @@ typedef enum {
 // 描画用Canvas：レイヤー構造で各要素を個別に描画し、最後に合体する
 // Rendering layers: Main display, clock, menu, and component buffers
 
-static M5Canvas cv_display(&M5.Display);
-static M5Canvas cv_clock(&cv_display);
-static M5Canvas cv_menu(&cv_display);
-static M5Canvas cv_ckbase(&cv_display);
-static M5Canvas cv_ckbase_digit(&cv_ckbase);
-static M5Canvas cv_dtime_bat(&cv_display);
-static M5Canvas cv_day(&cv_clock);
-static M5Canvas cv_ckhhand(&cv_clock);
-static M5Canvas cv_ckmhand(&cv_clock);
+M5Canvas cv_display(&M5.Display);
+M5Canvas cv_clock(&cv_display);
+M5Canvas cv_menu(&cv_display);
+M5Canvas cv_ckbase(&cv_display);
+M5Canvas cv_ckbase_digit(&cv_ckbase);
+M5Canvas cv_dtime_bat(&cv_display);
+M5Canvas cv_day(&cv_clock);
+M5Canvas cv_ckhhand(&cv_clock);
+M5Canvas cv_ckmhand(&cv_clock);
 
-static M5Canvas cv_stwt1(&cv_display);
-static M5Canvas cv_stwt2(&cv_display);
-static M5Canvas cv_stwt3(&cv_display);
-static M5Canvas cv_stwt4(&cv_display);
-static M5Canvas cv_stwt5(&cv_display);
-static M5Canvas cv_stwt_top(&cv_display);
+M5Canvas cv_stwt1(&cv_display);
+M5Canvas cv_stwt2(&cv_display);
+M5Canvas cv_stwt3(&cv_display);
+M5Canvas cv_stwt4(&cv_display);
+M5Canvas cv_stwt5(&cv_display);
+M5Canvas cv_stwt_top(&cv_display);
 
-static M5Canvas cv_uiadditional(&M5.Display); // 時刻選択UI用Canvas / Canvas for time selection UI
+M5Canvas cv_uiadditional(&M5.Display); // 時刻選択UI用Canvas / Canvas for time selection UI
 
 // =====================================
 // ==     Global UI & Data Objects    ==
@@ -136,10 +94,6 @@ dialtype_t dialType = DIAL_ZERODIAL;
 // 画面サイズと中心座標、時計中心などのレイアウト定数
 // Canvas size, center coordinates, and layout parameters
 
-const int32_t sizeX = 320;
-const int32_t centerX = sizeX/2;
-const int32_t sizeY = 240;
-const int32_t centerY = sizeY/2;
 const int32_t ckCenterX = 110;
 const int32_t ckCenterY = 110;
 const String week[7] = {"Sun", "Mon", "Tue", "Wed", "Thr", "Fri", "Sat"};
@@ -147,7 +101,11 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2607150; // [version]
+const uint32_t version = 2608280; // [version]
+const int32_t sizeX = 320;
+const int32_t centerX = 160;
+const int32_t sizeY = 240;
+const int32_t centerY = 120;
 
 const uint8_t timeSyncHour = 4;
 const IPAddress ip(192, 168, 10, 75);
@@ -186,6 +144,7 @@ const char* github_root_ca = "-----BEGIN CERTIFICATE-----\n"
 // ==      Device Information         ==
 // =====================================
 String M5Model;
+m5::board_t modelType; // 2 for Core2, 10 for CoreS3
 
 // =====================================
 // ==  State & Timer Management Vars ==
@@ -210,7 +169,6 @@ uint16_t lastSync = 0;
 uint32_t birthChangeTimer = 0;
 uint8_t birthChangeID = 0;
 uint8_t timeSyncMinute = 60;
-uint8_t modelType = 0; // 2 for Core2, 10 for CoreS3
 uint32_t latestVer = 0;
 uint8_t backLight = 64;
 uint16_t shutdownTimer = 0;
@@ -264,79 +222,19 @@ IRAM_ATTR void touchInterrupt() {
   }
 }
 
-void compatibleAttachInterrupt() {
-  if (modelType == 10) {
+inline void compatibleAttachInterrupt() {
+  if (modelType == m5::board_t::board_M5StackCoreS3 || modelType == m5::board_t::board_M5StackCoreS3SE) {
     attachInterrupt(GPIO_NUM_21, touchInterrupt, FALLING);
   } else {
     attachInterrupt(GPIO_NUM_39, touchInterrupt, FALLING);
   }
 }
 
-void compatibleDetachInterrupt() {
-  if (modelType == 10) {
+inline void compatibleDetachInterrupt() {
+  if (modelType == m5::board_t::board_M5StackCoreS3 || modelType == m5::board_t::board_M5StackCoreS3SE) {
     detachInterrupt(GPIO_NUM_21);
   } else {
     detachInterrupt(GPIO_NUM_39);
-  }
-}
-
-
-// 太い線を描画 / Draw a thicker line by overlaying multiple shifted lines
-void thickLine(M5Canvas target, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t color) {
-  target.drawLine(x0, y0, x1, y1, color);
-  target.drawLine(x0+1, y0, x1+1, y1, color);
-  target.drawLine(x0-1, y0, x1-1, y1, color);
-  target.drawLine(x0, y0+1, x1, y1+1, color);
-  target.drawLine(x0, y0-1, x1, y1-1, color);
-}
-
-// 論理値を指定文字列に変換 / Convert boolean to specified string
-String boolStr(bool target, String ifTrue, String ifFalse) {
-  if (target) {
-    return ifTrue;
-  } else {
-    return ifFalse;
-  }
-}
-
-// バッテリー残量に応じた色を計算 / Calculate color based on battery level (green->yellow->red)
-uint32_t batcolor(int32_t bat) {
-  float r, g;
-  if (bat <= 50) {
-    r = 255;
-    g = (bat*255)/50;
-  } else {
-    r = ((100-bat)*255)/50;
-    g = 255;
-  }
-  return M5.Display.color888((u_int8_t) r, (u_int8_t) g, 0);
-}
-
-// M5Stack デバイスモデルを英字名で取得 / Detect and return M5Stack device model name
-String getModel() {
-  modelType = M5.getBoard();
-  switch (modelType) {
-    case m5::board_t::board_M5StackCoreS3: return "CoreS3";
-    case m5::board_t::board_M5StackCoreS3SE: return "CoreS3-SE";
-    case m5::board_t::board_M5AtomS3Lite: return "ATOMS3 Lite";
-    case m5::board_t::board_M5AtomS3: return "ATOMS3";
-    case m5::board_t::board_M5StampC3: return "StampC3";
-    case m5::board_t::board_M5StampC3U: return "StampC3U";
-    case m5::board_t::board_M5Stack: return "Basic";
-    case m5::board_t::board_M5StackCore2: return "Core2";
-    case m5::board_t::board_M5StickC: return "StickC";
-    case m5::board_t::board_M5StickCPlus: return "StickCPlus";
-    case m5::board_t::board_M5StackCoreInk: return "CoreInk";
-    case m5::board_t::board_M5Paper: return "Paper";
-    case m5::board_t::board_M5Tough: return "Tough";
-    case m5::board_t::board_M5Station: return "Station";
-    case m5::board_t::board_M5AtomMatrix: return "ATOM Matrix";
-    case m5::board_t::board_M5AtomLite: return "ATOM Lite";
-    case m5::board_t::board_M5AtomPsram: return "ATOM PSRAM";
-    case m5::board_t::board_M5AtomU: return "ATOM U";
-    case m5::board_t::board_M5TimerCam: return "TimerCamera";
-    case m5::board_t::board_M5StampPico: return "StampPico";
-    default: return "Unknown";
   }
 }
 
@@ -355,70 +253,6 @@ void appEnd() {
   appUI.reset();
   M5.Speaker.end();
   touchInterrupted = false;
-}
-
-// 日本の祝日判定 / Check if a given date is a Japanese holiday (powered by ChatGPT)
-// 3連休ルール対応：繰り替え休日と昭和の日のフローティング等を実装
-bool isHoliday(int32_t month, int32_t day, int32_t year, int32_t weekday) {
-  if (month == 1 && day == 1) return true;
-  if (month == 1 && weekday == 1 && day >= 8 && day <= 14) return true;
-  if (month == 2 && day == 11) return true;
-  if (month == 3 && day == 20+(year%4 == 3)) return true;
-  if (month == 4 && day == 29) return true;
-  if (month == 5 && day == 3) return true;
-  if (month == 5 && day == 4) return true;
-  if (month == 5 && day == 5) return true;
-  if (month == 7 && weekday == 1 && day >= 15 && day <= 21) return true;
-  if (month == 8 && day == 11) return true;
-  if (month == 9 && weekday == 1 && day >= 15 && day <= 21) return true;
-  if (month == 9 && day == 23-(year%4 == 0)) return true;
-  if (month == 10 && weekday == 1 && day >= 8 && day <= 14) return true;
-  if (month == 11 && day == 3) return true;
-  if (month == 11 && day == 23) return true;
-  if (month == 2 && day == 23) return true;
-  if (weekday == 0) {
-    return (isHoliday(month, day - 1, year, 6));
-  }
-  return false;
-}
-
-// うるう年判定 / Determine if a year is a leap year (Gregorian calendar rules)
-bool isLeapYear(uint8_t year) {
-  if (year % 400 == 0) return true;
-  else if (year % 100 == 0) return false;
-  else if (year % 4 == 0) return true;
-  return false;
-}
-
-// 指定月の最大日数を取得（うるう年対応） / Get maximum day in month (leap year aware)
-uint8_t getMonthMaxDay(uint8_t month, bool leapYear) {
-  switch (month) {
-    case 1: return 31;
-    case 2: {
-      if (leapYear) return 29;
-      return 28;
-    }
-    case 3: return 31;
-    case 4: return 30;
-    case 5: return 31;
-    case 6: return 30;
-    case 7: return 31;
-    case 8: return 31;
-    case 9: return 30;
-    case 10: return 31;
-    case 11: return 30;
-    case 12: return 31;
-    default: return 0;
-  }
-}
-
-// 日付から曜日を計算（ツェラーの公式） / Calculate weekday from date (Zeller's formula from Wikipedia)
-uint8_t dateToWeekday(uint16_t y, uint8_t m, uint8_t d) {
-  if (m < 3) {
-    y--;
-    m += 12;
-  }
-  return (y + y/4 - y/100 + y/400 + (13*m + 8)/5 + d) % 7;
 }
 
 // LittleFS から JSON ファイルを読み込み / Read JSON from LittleFS file
@@ -485,17 +319,12 @@ bool checkAccel() {
   return (change < 0.05);
 }
 
-bool isVbus() {
-  return M5.Power.Axp2101.isVBUS();
-  // return M5.Power.getVBUSVoltage() > 4900; // 4.9V以上をUSB接続とみなす（充電中も含む）
-}
-
 void compatibleLightSleep(uint32_t duration, bool noInterrupt) {
   if (noInterrupt) {
     //noInterrupts();
     compatibleDetachInterrupt();
   }
-  if (modelType == 10) {
+  if (modelType == m5::board_t::board_M5StackCoreS3 || modelType == m5::board_t::board_M5StackCoreS3SE) {
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_21, false);
     esp_sleep_enable_timer_wakeup(duration);
     esp_light_sleep_start();
@@ -666,31 +495,6 @@ void syncTime() {
   // Serial.println("OK!");
 }
 
-// 設定メニュー内で時刻同期を実行 / Sync time from settings menu (with visual feedback)
-void syncTimeOnSettings() {
-  M5.Display.clear();
-  M5.Display.setCursor(0, 0);
-  M5.Display.setTextColor(WHITE, BLACK);
-  M5.Display.println("Time Sync...");
-  long wifiTimer = millis();
-  String SSID = connectWiFi(wifiJson);
-  if (SSID != "") {
-    M5.Display.println("WiFi: "+SSID);
-    while (!(WiFi.status() == WL_CONNECTED or (millis()-wifiTimer) > 10000)) {
-      delay(1000);
-    }
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    M5.Display.println("Wi-Fi Ready");
-    syncTime();
-    lastSync = dateTime.date.date+(dateTime.date.month<<5);
-  } else {
-    M5.Display.println("Wi-Fi Failed");
-  }
-  dateTime = M5.Rtc.getDateTime();
-  WiFi.disconnect(true);
-}
-
 // アラーム/スピード速報を試播と操作で試播を実行 / Display notice with sound and vibration
 void notice(String title, String time) {
   M5.Display.wakeup();
@@ -735,6 +539,11 @@ bool checkAlarm() {
       if (dateTime.time.hours == hour and dateTime.time.minutes == min and lastAlarmMin != min) {
         lastAlarmMin = min;
         notice("Alarm", forceDigits(hour, 2)+":"+forceDigits(min, 2));
+        if (loopAlarm["onetime"]) {
+          loopAlarm["weekday"] = false;
+          loopAlarm["weekend"] = false;
+          writeSPIJson("/alarm.json", &alarmJson);
+        }
         M5.Rtc.clearIRQ();
         setRTCAlarmIRQ();
         return true;
@@ -757,7 +566,7 @@ bool checkTimer() {
 }
 
 // Touch scroll processing - calculates position delta from touch movement
-void scrollsWhenTouch(m5::touch_detail_t detail, int32_t* target, bool vertical = false) {
+void scrollsWhenTouch(m5::touch_detail_t detail, int32_t* target, bool vertical) {
   int32_t now;
   int32_t prev;
   if (vertical) {
@@ -779,7 +588,7 @@ void scrollsWhenTouch(m5::touch_detail_t detail, int32_t* target, bool vertical 
 }
 
 // Inertial scroll animation with boundary snapping - decelerates scrolling
-void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, uint8_t* nowChosen, uint8_t* nextChosen, bool useAcc = true, float speed = 2, uint8_t maxAccMulti = 10) {
+void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, bool useAcc, float speed, uint8_t maxAccMulti) {
   if (*target < 0) {
     *target += (0-*target)/speed;
     *target = round(*target);
@@ -797,13 +606,11 @@ void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, uint
         maxAcc = prevSwipeAcc[i];
       }
     }
-    int32_t calib = limit(maxAcc*maxAccMulti, -(distant/2), distant/2);
-    *nextChosen = limit(round(((float) (*target+calib)/distant)), 0, indexes-1);
-    int32_t swipeTarget = limit(round(((float) (*target+calib)/distant))*distant, max(0, ((*nowChosen-1)*distant)), min((indexes-1)*distant, ((*nowChosen+1)*distant)));
+    int32_t calib = constrain(maxAcc*maxAccMulti, -(distant/2), distant/2);
+    int32_t swipeTarget = constrain(round(((float) (*target+calib)/distant))*distant, 0, (indexes-1)*distant);
     *target += (swipeTarget-*target)/speed;
     if (abs(*target-swipeTarget) <= 1) {
       *target = swipeTarget;
-      *nowChosen = *nextChosen;
     }
   }
   prevTX = -1;
@@ -831,15 +638,14 @@ void connectWiFiAndTimeSync() {
 // Deep sleep mode - maintains minimal power while monitoring for wake events
 void lowPowSleep() {
   uint8_t touch = 0;
-  bool charged = isVbus();
+  bool charged = M5.Power.Axp2101.isVBUS();
   M5.Display.clear();
   M5.Display.setBrightness(0);
   M5.Display.sleep();
   M5.Imu.sleep();
-  setCpuFrequencyMhz(80);
   lowpower = true;
   updateExtOutput(false, charged);
-  while (!((touch > 0) or (charged != isVbus()))) {
+  while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
     dateTime = M5.Rtc.getDateTime();
     if (checkAlarm() || checkTimer()) break;
     if (dateTime.time.hours == timeSyncHour and lastSync != dateTime.date.date+(dateTime.date.month*32)) {
@@ -851,10 +657,11 @@ void lowPowSleep() {
       }
     }
     compatibleLightSleep(10000000, true);
+    setCpuFrequencyMhz(80);
     M5.update();
     touch = M5.Touch.getCount();
   }
-  updateExtOutput(true, isVbus());
+  updateExtOutput(true, M5.Power.Axp2101.isVBUS());
   M5.Imu.begin();
 }
 
@@ -862,15 +669,15 @@ void activeSleep() {
   uint8_t touch = 0;
   uint8_t alarmTimer = 0;
   uint16_t lowPowTimer = 0;
-  bool charged = isVbus();
+  bool charged = M5.Power.Axp2101.isVBUS();
   M5.Display.clear();
   M5.Display.setBrightness(0);
   M5.Display.sleep();
-  setCpuFrequencyMhz(80);
   lowpower = true;
   updateExtOutput(false, charged);
-  while (!((touch > 0) or (charged != isVbus()))) {
+  while (!((touch > 0) or (charged != M5.Power.Axp2101.isVBUS()))) {
     compatibleLightSleep(100000, true);
+    setCpuFrequencyMhz(80);
     M5.update();
     if (M5.BtnPWR.getState() == m5::Button_Class::state_clicked) break;
     if ((!charged) and (checkGyro())) break;
@@ -896,7 +703,7 @@ void activeSleep() {
     alarmTimer++;
     touch = M5.Touch.getCount();
   }
-  updateExtOutput(true, isVbus());
+  updateExtOutput(true, M5.Power.Axp2101.isVBUS());
 }
 
 // Update current date, time, and battery level from RTC and power manager
@@ -967,7 +774,7 @@ void makeClockBase() {
     } else if (dialType == DIAL_ZERODIAL) {
       drawCircleWithAA(&cv_ckbase, (sin(deg)*90)+ckCenterX, (cos(deg)*90)+ckCenterY, 3, col0, TFT_BLACK);
     } else {
-      thickLine(cv_ckbase, (sin(deg)*97)+ckCenterX, (cos(deg)*97)+ckCenterY, (sin(deg)*106)+ckCenterX, (cos(deg)*106)+ckCenterY, col0);
+      thickLine(&cv_ckbase, (sin(deg)*97)+ckCenterX, (cos(deg)*97)+ckCenterY, (sin(deg)*106)+ckCenterX, (cos(deg)*106)+ckCenterY, col0);
     }
   }
   cv_ckbase_digit.pushSprite(0, 0, TFT_BLACK);
@@ -989,71 +796,6 @@ uint16_t getBatteryVoltage() {
   return 65535;
 }
 
-// ======================================
-// ===== Application Functions (アプリ関数) =====
-// ======================================
-
-// Play a simple beep tone (440 Hz, 500ms)
-void beep() {
-  M5.Speaker.tone(440, 500);
-}
-
-// Settings
-
-/* 電源設定
-
-ジャイロ起動からのスリープの時間 5s 10s 15s 30s 1m
-タッチからのスリープの時間 5s 10s 15s 30s 1m
-自動シャットダウンの時間 1m 2m 3m 5m 10m 20m 30m 60m なし
-
-*/
-
-void powerOff() { M5.Power.powerOff(); }
-
-void settings_init();
-void settings_chooseLang();
-void settings_setLang(String langTarget);
-void settings_dateTime();
-void settings_chooseTime();
-void settings_setTime();
-void settings_chooseDate();
-void settings_setDate();
-void settings_chooseYear();
-void settings_powerBack();
-void settings_powerChoose();
-void settings_display();
-void settings_chooseBrightness();
-void settings_setBrightness(String brightness);
-void settings_chooseStyle();
-void settings_setStyle(String style);
-void settings_notice();
-void settings_chooseVolume();
-void settings_setVolume(String volume);
-void settings_switchVibration();
-void settings_testNotice();
-void settings_power(String chargeOrBattery);
-void settings_chooseVoltage();
-void settings_switchShowVoltage();
-void settings_setVoltage(String voltage);
-void settings_chooseCurrent();
-void settings_setCurrent(String current);
-void settings_switchSleep();
-void settings_chooseExtPower();
-void settings_setExtPower(String extMode);
-void settings_chooseSleep(String touchOrGyro);
-void settings_setSleep(String slpTime);
-void settings_setAutoShutdown();
-void settings_chooseStyle();
-void settings_setStyle(String style);
-void settings_info();
-void settings_setYear(String year);
-void settings_save();
-void settings_loop();
-
-bool settings_saved = true;
-bool settings_choseBat = false;
-bool settings_choseGyro = false;
-
 String getVersionString(uint32_t ver) {
   uint8_t vYear = ver/100000;
   uint8_t vMonth = (ver/1000)%100;
@@ -1068,1247 +810,37 @@ String getVersionString(uint32_t ver) {
   }
 }
 
-void settings_init() {
-  appUI.reset();
-  appUI.setTitle("Settings");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.addLocaleToTitle("ja", "設定");
-  appUI.addItem("save", settings_save, "Save");
-  appUI.addLocaleToItem("save", "ja", "保存");
-  if (settings_saved) {
-    appUI.addRightLocaleToItem("save", "en", "Saved");
-    appUI.addRightLocaleToItem("save", "ja", "保存済み");
-    appUI.setItemRightColor("save", M5.Display.color888(0, 255, 0));
-  } else {
-    appUI.addRightLocaleToItem("save", "en", "Not Saved");
-    appUI.addRightLocaleToItem("save", "ja", "未保存");
-    appUI.setItemRightColor("save", M5.Display.color888(255, 0, 0));
-  }
-  appUI.addItem("lang", settings_chooseLang, "Change Language");
-  appUI.addLocaleToItem("lang", "ja", "言語変更");
-  appUI.addItem("power", settings_powerChoose, "Power Settings");
-  appUI.addLocaleToItem("power", "ja", "電源設定");
-  appUI.addItem("time", settings_dateTime, "Date and Time");
-  appUI.addLocaleToItem("time", "ja", "日付と時刻");
-  appUI.addItem("display", settings_display, "Display and Visuals");
-  appUI.addLocaleToItem("display", "ja", "ディスプレイと外観");
-  appUI.addItem("notice", settings_notice, "Notices");
-  appUI.addLocaleToItem("notice", "ja", "通知");
-  appUI.addItem("verinfo", settings_info, "Infomation");
-  appUI.addLocaleToItem("verinfo", "ja", "情報");
-  appUI.linkFunctionToBack(appEnd);
-  appUI.makeUI(lang);
-}
+// ======================================
+// ===== Application Functions (アプリ関数) =====
+// ======================================
 
-void settings_chooseLang() {
-  appUI.reset();
-  appUI.setTitle("Change Language");
-  appUI.addItem("en", settings_setLang, "English");
-  appUI.addItem("ja", settings_setLang, "Japanese");
-  appUI.linkFunctionToBack(settings_init);
-  appUI.makeUI();
-}
-
-void settings_setLang(String langTarget) {
-  lang[0] = langTarget.charAt(0);
-  lang[1] = langTarget.charAt(1);
-  settings_saved = false;
-  settings_init();
-}
-
-void settings_dateTime() {
-  appUI.reset();
-  appUI.setTitle("Date and Time");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.addLocaleToTitle("ja", "日付と時刻");
-  appUI.linkFunctionToBack(settings_init);
-  appUI.addItem("synctime", syncTimeOnSettings, "Sync Time from NTP");
-  appUI.addLocaleToItem("synctime", "ja", "NTPから時刻を同期");
-  appUI.addItem("year", settings_chooseYear, "Change Year");
-  appUI.addLocaleToItem("year", "ja", "年を変更");
-  appUI.addItem("date", settings_chooseDate, "Change Date");
-  appUI.addLocaleToItem("date", "ja", "日付を変更");
-  appUI.addItem("time", settings_chooseTime, "Change Time");
-  appUI.addLocaleToItem("time", "ja", "時間を変更");
-  appUI.makeUI(lang);
-}
-
-void settings_chooseYear() {
-  appUI.reset();
-  appUI.setTitle("Year Settings");
-  appUI.addLocaleToTitle("ja", "年設定");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.linkFunctionToBack(settings_dateTime);
-  for (uint16_t i = 2020; i < 2050; i++) {
-    appUI.addItem(String(i), settings_setYear, (String) i);
-  }
-  appUI.makeUI(lang);
-}
-
-void settings_setYear(String year) {
-  UIAddtional = UI_NOTHING;
-  cv_uiadditional.deleteSprite();
-  m5::rtc_date_t date;
-  date.year = year.toInt();
-  date.month = dateTime.date.month;
-  date.weekDay = dateToWeekday(date.year, dateTime.date.month, dateTime.date.weekDay);
-  date.date = dateTime.date.date;
-  M5.Rtc.setDate(date);
-  setRTCAlarmIRQ();
-  settings_init();
-}
-
-void settings_chooseDate() {
-  appUI.reset();
-  appUI.setTitle("Date Settings");
-  appUI.addLocaleToTitle("ja", "日付設定");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTransparentMode(true);
-  appUI.linkFunctionToBack(settings_setDate);
-  UIAddtional = UI_TIME;
-  UIAddtionalSettings = TIMEUI_MODE_DATE;
-  cv_uiadditional.createSprite(300, 165);
-  UItimeLeft = dateTime.date.month;
-  UItimeRight = dateTime.date.date;
-  M5.Display.fillRect(0, 65, sizeX, sizeY, TFT_BLACK);
-  drawTimeUI();
-  appUI.makeUI(lang);
-}
-
-void settings_setDate() {
-  UIAddtional = UI_NOTHING;
-  cv_uiadditional.deleteSprite();
-  m5::rtc_date_t date;
-  date.year = dateTime.date.year;
-  date.month = UItimeLeft;
-  date.weekDay = dateToWeekday(dateTime.date.year, UItimeLeft, UItimeRight);
-  date.date = UItimeRight;
-  M5.Rtc.setDate(date);
-  setRTCAlarmIRQ();
-  settings_init();
-}
-
-void settings_chooseTime() {
-  appUI.reset();
-  appUI.setTitle("Time Settings");
-  appUI.addLocaleToTitle("ja", "時間設定");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTransparentMode(true);
-  appUI.linkFunctionToBack(settings_setTime);
-  UIAddtional = UI_TIME;
-  UIAddtionalSettings = TIMEUI_MODE_HOURMIN;
-  cv_uiadditional.createSprite(300, 165);
-  UItimeLeft = dateTime.time.hours;
-  UItimeRight = dateTime.time.minutes;
-  M5.Display.fillRect(0, 65, sizeX, sizeY, TFT_BLACK);
-  drawTimeUI();
-  appUI.makeUI(lang);
-}
-
-void settings_setTime() {
-  UIAddtional = UI_NOTHING;
-  cv_uiadditional.deleteSprite();
-  m5::rtc_time_t time;
-  time.hours = UItimeLeft;
-  time.minutes = UItimeRight;
-  time.seconds = dateTime.time.seconds;
-  M5.Rtc.setTime(time);
-  setRTCAlarmIRQ();
-  settings_init();
-}
-
-void settings_display() {
-  appUI.reset();
-  appUI.setTitle("Display and Visuals");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.addLocaleToTitle("ja", "ディスプレイと外観");
-  appUI.linkFunctionToBack(settings_init);
-  appUI.addItem("brightness", settings_chooseBrightness, "Screen Brightness");
-  appUI.addLocaleToItem("brightness", "ja", "画面の明るさ");
-  appUI.addRightLocaleToItem("brightness", "en", String((screenBrightness+1)*10)+"%");
-  appUI.addItem("style", settings_chooseStyle, "Dial Style");
-  appUI.addLocaleToItem("style", "ja", "文字盤のスタイル");
-  if (dialType == DIAL_CLASSIC) {
-    appUI.addRightLocaleToItem("style", "en", "Classic");
-    appUI.addRightLocaleToItem("style", "ja", "クラシック");
-  } else {
-    appUI.addRightLocaleToItem("style", "en", "ZeroDial");
-  }
-  appUI.makeUI(lang);
-}
-
-void settings_chooseBrightness() {
-  appUI.reset();
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("Screen Brightness");
-  appUI.addLocaleToTitle("ja", "画面の明るさ");
-  for (uint8_t i = 1; i <= 10; i++) {
-    appUI.addItem(String(i-1), settings_setBrightness, String(i*10)+"%");
-    appUI.addLocaleToItem(String(i-1), "ja", String(i*10)+"%");
-  }
-  appUI.linkFunctionToBack(settings_display);
-  appUI.makeUI(lang);
-}
-
-void settings_setBrightness(String brightness) {
-  settings_saved = false;
-  screenBrightness = brightness.toInt();
-  M5.Display.setBrightness(255*((screenBrightness+1)/10.0));
-  settings_display();
-}
-
-void settings_chooseStyle() {
-  appUI.reset();
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("Dial Style");
-  appUI.addLocaleToTitle("ja", "文字盤のスタイル");
-  appUI.addItem("classic", settings_setStyle, "Classic");
-  appUI.addLocaleToItem("classic", "ja", "クラシック");
-  appUI.addItem("zerodial", settings_setStyle, "ZeroDial");
-  appUI.linkFunctionToBack(settings_display);
-  appUI.makeUI(lang);
-}
-
-void settings_setStyle(String style) {
-  settings_saved = false;
-  if (style == "classic") {
-    dialType = DIAL_CLASSIC;
-  } else {
-    dialType = DIAL_ZERODIAL;
-  }
-  makeClockBase();
-  settings_init();
-}
-
-void settings_notice() {
-  appUI.reset();
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("Notices");
-  appUI.addLocaleToTitle("ja", "通知");
-  appUI.addItem("volume", settings_chooseVolume, "Volume");
-  appUI.addLocaleToItem("volume", "ja", "音量");
-  appUI.addRightLocaleToItem("volume", "en", String((speakerVolume)*10)+"%");
-  appUI.addItem("vibration", settings_switchVibration, "Vibration");
-  appUI.addLocaleToItem("vibration", "ja", "振動");
-  appUI.addRightLocaleToItem("vibration", "en", boolStr(modelType == 2, boolStr(vibration, "Enable", "Disable"), "N/A"));
-  appUI.addRightLocaleToItem("vibration", "ja", boolStr(modelType == 2, boolStr(vibration, "有効", "無効"), "使用不可"));
-  appUI.addItem("testNotice", settings_testNotice, "Test Notice");
-  appUI.addLocaleToItem("testNotice", "ja", "通知のテスト");
-  appUI.linkFunctionToBack(settings_init);
-  appUI.makeUI(lang);
-}
-
-void settings_chooseVolume() {
-  appUI.reset();
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("Volume");
-  appUI.addLocaleToTitle("ja", "音量");
-  for (uint8_t i = 0; i <= 10; i++) {
-    appUI.addItem(String(i), settings_setVolume, String(i*10)+"%");
-    appUI.addLocaleToItem(String(i), "ja", String(i*10)+"%");
-  }
-  appUI.linkFunctionToBack(settings_notice);
-  appUI.makeUI(lang);
-}
-
-void settings_setVolume(String volume) {
-  settings_saved = false;
-  speakerVolume = volume.toInt();
-  settings_notice();
-}
-
-void settings_switchVibration() {
-  if (modelType == 2) {
-    vibration = !vibration;
-    settings_saved = false;
-    appUI.addRightLocaleToItem("vibration", "en", boolStr(vibration, "Enable", "Disable"));
-    appUI.addRightLocaleToItem("vibration", "ja", boolStr(vibration, "有効", "無効"));
-    appUI.makeUI(lang);
-  }
-}
-
-void settings_testNotice() {
-  notice("Test Notice", "");
-}
-
-void settings_info() {
-  appUI.reset();
-  String verStr = getVersionString(version);
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("Infomation");
-  appUI.addLocaleToTitle("ja", "情報");
-  appUI.addItem("basever", nothing, "Version");
-  appUI.addLocaleToItem("basever", "ja", "バージョン");
-  appUI.addRightLocaleToItem("basever", "en", verStr);
-  appUI.addItem("model", nothing, "Model");
-  appUI.addLocaleToItem("model", "ja", "モデル");
-  appUI.addRightLocaleToItem("model", "en", getModel());
-  appUI.addItem("pmic", nothing, "Power Management IC");
-  appUI.addLocaleToItem("pmic", "ja", "電源管理IC");
-  if (M5.Power.getType() == m5::Power_Class::pmic_axp192) {
-    appUI.addRightLocaleToItem("pmic", "en", "AXP192");
-  } else if (M5.Power.getType() == m5::Power_Class::pmic_axp2101) {
-    appUI.addRightLocaleToItem("pmic", "en", "AXP2101");
-  } else {
-    appUI.addRightLocaleToItem("pmic", "en", "Unknown");
-    appUI.addRightLocaleToItem("pmic", "ja", "不明");
-  }
-  appUI.addItem("imu", nothing, "IMU");
-  appUI.addLocaleToItem("imu", "ja", "IMU");
-  if (M5.Imu.getType() == m5::imu_mpu6886) {
-    appUI.addRightLocaleToItem("imu", "en", "MPU6886");
-  } else if (M5.Imu.getType() == m5::imu_bmi270) {
-    appUI.addRightLocaleToItem("imu", "en", "BMI270");
-  } else if (M5.Imu.getType() == m5::imu_none) {
-    appUI.addRightLocaleToItem("imu", "en", "None");
-    appUI.addRightLocaleToItem("imu", "ja", "なし");
-  } else {
-    appUI.addRightLocaleToItem("imu", "en", "Unknown");
-    appUI.addRightLocaleToItem("imu", "ja", "不明");
-  }
-  appUI.linkFunctionToBack(settings_init);
-  appUI.makeUI(lang);
-}
-
-void settings_powerChoose() {
-  uint32_t fixedChargeCurrent = chargeCurrent*100;
-  float fixedChargeVoltage = (chargeVoltage*0.1)+4.0;
-  appUI.reset();
-  appUI.setTitle("Power Settings");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.addLocaleToTitle("ja", "電源設定");
-  appUI.linkFunctionToBack(settings_init);
-  appUI.addItem("charge", settings_power, "Settings when Charging");
-  appUI.addLocaleToItem("charge", "ja", "充電時の設定");
-  appUI.addItem("battery", settings_power, "Settings when Battery");
-  appUI.addLocaleToItem("battery", "ja", "バッテリー時の設定");
-  appUI.addItem("current", settings_chooseCurrent, "Max Charge Current");
-  appUI.addLocaleToItem("current", "ja", "最大充電電流");
-  appUI.addRightLocaleToItem("current", "en", String(fixedChargeCurrent)+"mA");
-  appUI.addRightLocaleToItem("current", "ja", String(fixedChargeCurrent)+"mA");
-  appUI.addItem("voltage", settings_chooseVoltage, "Max Charge Voltage");
-  appUI.addLocaleToItem("voltage", "ja", "最大充電電圧");
-  appUI.addRightLocaleToItem("voltage", "en", String(fixedChargeVoltage, 1)+"V");
-  appUI.addRightLocaleToItem("voltage", "ja", String(fixedChargeVoltage, 1)+"V");
-  appUI.addItem("showvoltage", settings_switchShowVoltage, "Show VBat");
-  appUI.addLocaleToItem("showvoltage", "ja", "電池電圧の表示");
-  appUI.addRightLocaleToItem("showvoltage", "en", boolStr(showVoltage, "Enabled", "Disabled"));
-  appUI.addRightLocaleToItem("showvoltage", "ja", boolStr(showVoltage, "有効", "無効"));
-  appUI.makeUI(lang);
-}
-
-void settings_switchShowVoltage() {
-  if (modelType == 2) {
-    showVoltage = !showVoltage;
-    settings_saved = false;
-    appUI.addRightLocaleToItem("showvoltage", "en", boolStr(showVoltage, "Enabled", "Disabled"));
-    appUI.addRightLocaleToItem("showvoltage", "ja", boolStr(showVoltage, "有効", "無効"));
-    appUI.makeUI(lang);
-  }
-}
-
-void settings_chooseCurrent() {
-  appUI.reset();
-  appUI.setTitle("Max Charge Current");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.addLocaleToTitle("ja", "最大充電電流");
-  appUI.linkFunctionToBack(settings_powerChoose);
-  appUI.addItem("1", settings_setCurrent, "100mA");
-  appUI.addItem("2", settings_setCurrent, "200mA");
-  appUI.addItem("3", settings_setCurrent, "300mA");
-  appUI.makeUI(lang);
-}
-
-void settings_setCurrent(String current) {
-  settings_saved = false;
-  if (current == "1") {
-    chargeCurrent = 1;
-  } else if (current == "2") {
-    chargeCurrent = 2;
-  } else if (current == "3") {
-    chargeCurrent = 3;
-  }
-  M5.Power.setChargeCurrent(min(chargeCurrent*100, 300));
-  settings_powerChoose();
-}
-
-void settings_chooseVoltage() {
-  appUI.reset();
-  appUI.setTitle("Max Charge Voltage");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.addLocaleToTitle("ja", "最大充電電圧");
-  appUI.linkFunctionToBack(settings_powerChoose);
-  appUI.addItem("0", settings_setVoltage, "4.0V");
-  appUI.addItem("1", settings_setVoltage, "4.1V");
-  appUI.addItem("2", settings_setVoltage, "4.2V");
-  appUI.makeUI(lang);
-}
-
-void settings_setVoltage(String voltage) {
-  settings_saved = false;
-  if (voltage == "0") {
-    chargeVoltage = 0;
-  } else if (voltage == "1") {
-    chargeVoltage = 1;
-  } else if (voltage == "2") {
-    chargeVoltage = 2;
-  }
-  M5.Power.setChargeVoltage(min((chargeVoltage*100)+4000, 4200));
-  settings_powerChoose();
-}
-
-void settings_power(String chargeOrBattery) {
-  if (chargeOrBattery == "charge") {
-    settings_choseBat = false;
-  } else if (chargeOrBattery == "battery") {
-    settings_choseBat = true;
-  } else {
-    settings_init();
-    return;
-  }
-  settings_powerBack();
-}
-
-void settings_powerBack() {
-  appUI.reset();
-  if (settings_choseBat) appUI.setTitle("Power (Bat)");
-  else appUI.setTitle("Power (Chg)");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  if (settings_choseBat) appUI.addLocaleToTitle("ja", "電源設定（電池）");
-  else appUI.addLocaleToTitle("ja", "電源設定（充電）");
-  appUI.linkFunctionToBack(settings_powerChoose);
-  appUI.addItem("sleep", settings_switchSleep, "Sleeping");
-  appUI.addLocaleToItem("sleep", "ja", "スリープ");
-  appUI.addRightLocaleToItem("sleep", "en", boolStr(doSleep[settings_choseBat], "Enable", "Disable"));
-  appUI.addRightLocaleToItem("sleep", "ja", boolStr(doSleep[settings_choseBat], "有効", "無効"));
-  if (doSleep[settings_choseBat]) appUI.addItem("touchsleep", settings_chooseSleep, "Touch sleep time");
-  else appUI.addItem("touchsleep", nothing, "Touch sleep time");
-  appUI.addLocaleToItem("touchsleep", "ja", "タッチスリープ時間");
-  appUI.addRightLocaleToItem("touchsleep", "en", boolStr(doSleep[settings_choseBat], String(sleepTimings[settings_choseBat])+"s", "N/A"));
-  appUI.addRightLocaleToItem("touchsleep", "ja", boolStr(doSleep[settings_choseBat], String(sleepTimings[settings_choseBat])+"秒", "使用不可"));
-  if (doSleep[1] and settings_choseBat) appUI.addItem("gyrosleep", settings_chooseSleep, "Gyro sleep time");
-  else appUI.addItem("gyrosleep", nothing, "Gyro sleep time");
-  appUI.addLocaleToItem("gyrosleep", "ja", "ジャイロスリープ時間");
-  appUI.addRightLocaleToItem("gyrosleep", "en", boolStr((doSleep[1] and settings_choseBat), String(sleepTimings[2+settings_choseBat])+"s", "N/A"));
-  appUI.addRightLocaleToItem("gyrosleep", "ja", boolStr((doSleep[1] and settings_choseBat), String(sleepTimings[2+settings_choseBat])+"秒", "使用不可"));
-  appUI.addItem("ext", settings_chooseExtPower, "Ext. Power supply");
-  appUI.addLocaleToItem("ext", "ja", "外部への給電");
-  if (extSettings[settings_choseBat] == EXT_POWER_ALWAYS) {
-    appUI.addRightLocaleToItem("ext", "en", "Always");
-    appUI.addRightLocaleToItem("ext", "ja", "常時");
-  } else if (extSettings[settings_choseBat] == EXT_POWER_ACTIVE) {
-    appUI.addRightLocaleToItem("ext", "en", "Only-A");
-    appUI.addRightLocaleToItem("ext", "ja", "画面点灯時");
-  } else if (extSettings[settings_choseBat] == EXT_POWER_NEVER) {
-    appUI.addRightLocaleToItem("ext", "en", "Never");
-    appUI.addRightLocaleToItem("ext", "ja", "しない");
-  }
-  appUI.makeUI(lang);
-}
-
-void settings_switchSleep() {
-  doSleep[settings_choseBat] = !doSleep[settings_choseBat];
-  appUI.addRightLocaleToItem("sleep", "en", boolStr(doSleep[settings_choseBat], "Enable", "Disable"));
-  appUI.addRightLocaleToItem("sleep", "ja", boolStr(doSleep[settings_choseBat], "有効", "無効"));
-  appUI.addRightLocaleToItem("touchsleep", "en", boolStr(doSleep[settings_choseBat], String(sleepTimings[settings_choseBat])+"s", "N/A"));
-  appUI.addRightLocaleToItem("touchsleep", "ja", boolStr(doSleep[settings_choseBat], String(sleepTimings[settings_choseBat])+"秒", "使用不可"));
-  appUI.addRightLocaleToItem("gyrosleep", "en", boolStr((doSleep[1] and settings_choseBat), String(sleepTimings[2+settings_choseBat])+"s", "N/A"));
-  appUI.addRightLocaleToItem("gyrosleep", "ja", boolStr((doSleep[1] and settings_choseBat), String(sleepTimings[2+settings_choseBat])+"秒", "使用不可"));
-  appUI.makeUI(lang);
-}
-
-void settings_chooseExtPower() {
-  appUI.reset();
-  if (settings_choseBat) appUI.setTitle("Ext.Power (Bat)");
-  else appUI.setTitle("Ext.Power (Chg)");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  if (settings_choseBat) appUI.addLocaleToTitle("ja", "外部への給電（電池）");
-  else appUI.addLocaleToTitle("ja", "外部への給電（充電）");
-  appUI.linkFunctionToBack(settings_powerBack);
-  appUI.addItem("A", settings_setExtPower, "Always");
-  appUI.addLocaleToItem("A", "ja", "常時");
-  appUI.addItem("O", settings_setExtPower, "Only Active");
-  appUI.addLocaleToItem("O", "ja", "画面点灯時");
-  appUI.addItem("N", settings_setExtPower, "Never");
-  appUI.addLocaleToItem("N", "ja", "しない");
-  appUI.makeUI(lang);
-}
-
-void settings_setExtPower(String extMode) {
-  if (extMode == "A") extSettings[settings_choseBat] = EXT_POWER_ALWAYS;
-  else if (extMode == "O") extSettings[settings_choseBat] = EXT_POWER_ACTIVE;
-  else if (extMode == "N") extSettings[settings_choseBat] = EXT_POWER_NEVER;
-  settings_saved = false;
-  settings_powerBack();
-}
-
-void settings_chooseSleep(String touchOrGyro) {
-  appUI.reset();
-  char initial;
-  if (touchOrGyro == "touchsleep") {
-    settings_choseGyro = false;
-    initial = 'T';
-  } else if (touchOrGyro == "gyrosleep") {
-    settings_choseGyro = true;
-    initial = 'G';
-  } else {
-    settings_powerBack();
-    return;
-  }
-  if (settings_choseBat) appUI.setTitle((String) initial+".Sleep Time (Bat)");
-  else appUI.setTitle((String) initial+".Sleep Time (Chg)");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  if (settings_choseBat) appUI.addLocaleToTitle("ja", (String) initial+"スリープ時間(電池)");
-  else appUI.addLocaleToTitle("ja", (String) initial+"スリープ時間(充電)");
-  appUI.linkFunctionToBack(settings_powerBack);
-  appUI.addItem("5", settings_setSleep, "5s");
-  appUI.addLocaleToItem("5", "ja", "5秒");
-  appUI.addItem("10", settings_setSleep, "10s");
-  appUI.addLocaleToItem("10", "ja", "10秒");
-  appUI.addItem("15", settings_setSleep, "15s");
-  appUI.addLocaleToItem("15", "ja", "15秒");
-  appUI.addItem("30", settings_setSleep, "30s");
-  appUI.addLocaleToItem("30", "ja", "30秒");
-  appUI.addItem("60", settings_setSleep, "60s");
-  appUI.addLocaleToItem("60", "ja", "60秒");
-  appUI.makeUI(lang);
-}
-
-void settings_setSleep(String slpTime) {
-  uint8_t slpTimeInt = slpTime.toInt();
-  sleepTimings[(settings_choseGyro*2)+settings_choseBat] = slpTimeInt;
-  sleepTimings_sys[(settings_choseGyro*2)+settings_choseBat] = 60000-(slpTimeInt*1000);
-  settings_saved = false;
-  settings_powerBack();
-}
-
-void settings_save() {
-  if (!settings_saved) {
-    settings_saved = true;
-    Preferences pref;
-    pref.begin("mk75_settings");
-    pref.putString("lang", lang);
-    uint32_t slpTime = ((uint32_t) sleepTimings[0] << 24) | ((uint32_t) sleepTimings[1] << 16) | ((uint32_t) sleepTimings[2] << 8) | (uint32_t) sleepTimings[3];
-    pref.putUInt("slpTime", slpTime);
-    uint8_t slpFlags = ((uint8_t) extSettings[0] << 4) | ((uint8_t) extSettings[1] << 2) | ((uint8_t) doSleep[0] << 1) | ((uint8_t) doSleep[1]);
-    pref.putUChar("slpFlags", slpFlags);
-    pref.putUChar("dialType", dialType);
-    pref.putUChar("charge", combineHex(chargeCurrent, chargeVoltage));
-    pref.putUChar("hmi", (vibration << 7)+(speakerVolume*10)+screenBrightness);
-    pref.putBool("showVoltage", showVoltage);
-    pref.end();
-    appUI.addRightLocaleToItem("save", "en", "Saved");
-    appUI.addRightLocaleToItem("save", "ja", "保存済み");
-    appUI.setItemRightColor("save", M5.Display.color888(0, 255, 0));
-    appUI.makeUI(lang);
-  }
-}
-
-void settings_loop() {
-  appUI.update(dateTime, battery, getBatteryVoltage());
-}
+// Settings
+extern void settings_init();
+extern void settings_loop();
 
 // Alarm
-uint8_t alarm_toConfig = 0;
-uint8_t alarm_count = 0;
-bool alarm_saved = true;
-
-void alarm_add();
-void alarm_remove();
-void alarm_config(String name);
-void alarm_configNow();
-void alarm_chooseTime();
-void alarm_setTime();
-void alarm_switchWeekday();
-void alarm_switchWeekend();
-void alarm_save();
-
-void alarm_init() {
-  appUI.reset();
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("Alarm");
-  appUI.addLocaleToTitle("ja", "アラーム");
-  appUI.addItem("save", alarm_save, "Save");
-  appUI.addLocaleToItem("save", "ja", "保存");
-  if (alarm_saved) {
-    appUI.addRightLocaleToItem("save", "en", "Saved");
-    appUI.addRightLocaleToItem("save", "ja", "保存済み");
-    appUI.setItemRightColor("save", M5.Display.color888(0, 255, 0));
-  } else {
-    appUI.addRightLocaleToItem("save", "en", "Not Saved");
-    appUI.addRightLocaleToItem("save", "ja", "未保存");
-    appUI.setItemRightColor("save", M5.Display.color888(255, 0, 0));
-  }
-  appUI.addItem("add", alarm_add, "+ Add Alarm");
-  appUI.addLocaleToItem("add", "ja", "+ アラームを追加");
-  uint8_t cnt = 0;
-  for( JsonObject loopAlarm : alarmJson.as<JsonArray>() ) {
-    int32_t hour = loopAlarm["hour"];
-    int32_t min = loopAlarm["min"];
-    appUI.addItem(String(cnt), alarm_config, forceDigits(hour, 2)+":"+forceDigits(min, 2));
-    cnt++;
-  }
-  alarm_count = cnt;
-  appUI.linkFunctionToBack(appEnd);
-  appUI.makeUI(lang);
-}
-
-void alarm_add() {
-  JsonDocument newAlarm;
-  alarm_saved = false;
-  newAlarm["hour"] = 6;
-  newAlarm["min"] = 0;
-  newAlarm["weekday"] = true;
-  newAlarm["weekend"] = true;
-  alarmJson.add(newAlarm);
-  setRTCAlarmIRQ();
-  alarm_config((String) alarm_count);
-}
-
-void alarm_remove() {
-  alarm_saved = false;
-  //Serial.println(alarm_toConfig);
-  alarmJson.remove((size_t) alarm_toConfig);
-  setRTCAlarmIRQ();
-  alarm_init();
-}
-
-void alarm_config(String name) {
-  alarm_toConfig = name.toInt();
-  appUI.reset();
-  appUI.setTitle("Edit Alarm");
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.addLocaleToTitle("ja", "アラームを編集");
-  appUI.addItem("time", alarm_chooseTime, "Time");
-  appUI.addLocaleToItem("time", "ja", "時刻");
-  appUI.addRightLocaleToItem("time", "en", forceDigits(alarmJson[alarm_toConfig]["hour"], 2)+":"+forceDigits(alarmJson[alarm_toConfig]["min"], 2));
-  appUI.addItem("weekday", alarm_switchWeekday, "Weekday");
-  appUI.addLocaleToItem("weekday", "ja", "平日");
-  appUI.addRightLocaleToItem("weekday", "en", boolStr(alarmJson[alarm_toConfig]["weekday"], "Enable", "Disable"));
-  appUI.addRightLocaleToItem("weekday", "ja", boolStr(alarmJson[alarm_toConfig]["weekday"], "有効", "無効"));
-  appUI.addItem("weekend", alarm_switchWeekend, "Weekend");
-  appUI.addLocaleToItem("weekend", "ja", "休日");
-  appUI.addRightLocaleToItem("weekend", "en", boolStr(alarmJson[alarm_toConfig]["weekend"], "Enable", "Disable"));
-  appUI.addRightLocaleToItem("weekend", "ja", boolStr(alarmJson[alarm_toConfig]["weekend"], "有効", "無効"));
-  appUI.addItem("remove", alarm_remove, "Remove");
-  appUI.addLocaleToItem("remove", "ja", "削除");
-  appUI.linkFunctionToBack(alarm_init);
-  appUI.makeUI(lang);
-}
-
-void alarm_configNow() {
-  alarm_config((String) alarm_toConfig);
-}
-
-void alarm_save() {
-  if (!alarm_saved) {
-    alarm_saved = true;
-    appUI.addRightLocaleToItem("save", "en", "Saved");
-    appUI.addRightLocaleToItem("save", "ja", "保存済み");
-    appUI.setItemRightColor("save", M5.Display.color888(0, 255, 0));
-    writeSPIJson("/alarm.json", &alarmJson);
-    appUI.makeUI(lang);
-  }
-}
-
-void alarm_setTime() {
-  UIAddtional = UI_NOTHING;
-  alarm_saved = false;
-  cv_uiadditional.deleteSprite();
-  alarmJson[alarm_toConfig]["hour"] = UItimeLeft;
-  alarmJson[alarm_toConfig]["min"] = UItimeRight;
-  setRTCAlarmIRQ();
-  alarm_configNow();
-}
-
-void alarm_chooseTime() {
-  appUI.reset();
-  appUI.setTitle("Time");
-  appUI.setTransparentMode(true);
-  appUI.linkFunctionToBack(alarm_setTime);
-  UIAddtional = UI_TIME;
-  UIAddtionalSettings = TIMEUI_MODE_HOURMIN;
-  cv_uiadditional.createSprite(300, 165);
-  UItimeLeft = alarmJson[alarm_toConfig]["hour"];
-  UItimeRight = alarmJson[alarm_toConfig]["min"];
-  M5.Display.fillRect(0, 65, sizeX, sizeY, TFT_BLACK);
-  drawTimeUI();
-  appUI.makeUI(lang);
-}
-
-void alarm_switchWeekday() {
-  alarm_saved = false;
-  alarmJson[alarm_toConfig]["weekday"] = !alarmJson[alarm_toConfig]["weekday"];
-  appUI.addRightLocaleToItem("weekday", "en", boolStr(alarmJson[alarm_toConfig]["weekday"], "Enable", "Disable"));
-  appUI.addRightLocaleToItem("weekday", "ja", boolStr(alarmJson[alarm_toConfig]["weekday"], "有効", "無効"));
-  appUI.makeUI(lang);
-}
-
-void alarm_switchWeekend() {
-  alarm_saved = false;
-  alarmJson[alarm_toConfig]["weekend"] = !alarmJson[alarm_toConfig]["weekend"];
-  appUI.addRightLocaleToItem("weekend", "en", boolStr(alarmJson[alarm_toConfig]["weekend"], "Enable", "Disable"));
-  appUI.addRightLocaleToItem("weekend", "ja", boolStr(alarmJson[alarm_toConfig]["weekend"], "有効", "無効"));
-  appUI.makeUI(lang);
-}
-
-void alarm_loop() {
-  appUI.update(dateTime, battery, getBatteryVoltage());
-}
+extern void alarm_init();
+extern void alarm_loop();
 
 // Stopwatch
-long stwts[5] = {0, 0, 0, 0, 0};
-long stwts_stop[5] = {0, 0, 0, 0, 0};
-int32_t stwt_swipe = 0;
-uint8_t stwt_touchedID = 0;
-uint16_t stwt_touchedTime = 0;
-bool stwt_afterReset = false;
-bool stwt_wasTouched = false;
-uint8_t stwt_chosenAtScroll = 0;
-uint8_t stwt_nextChosenAtScroll = 0;
-
-void stopwatch_redraw(M5Canvas& target, uint8_t id) {
-  uint8_t min;
-  uint8_t sec;
-  uint16_t milli;
-  if (stwts[id] == 0) {
-    min = 0;
-    sec = 0;
-    milli = 0;
-  } else if (stwts_stop[id] == 0) {
-    min = floor((millis()-stwts[id])/60000);
-    sec = floor((millis()-stwts[id])/1000);
-    sec = sec%60;
-    milli = (millis()-stwts[id])%1000;
-  } else {
-    min = floor((stwts_stop[id]-stwts[id])/60000);
-    sec = floor((stwts_stop[id]-stwts[id])/1000);
-    sec = sec%60;
-    milli = (stwts_stop[id]-stwts[id])%1000;
-  }
-  target.clear();
-  if (sec%2 == 0){
-    target.fillCircle(85, 85, 80, TFT_WHITE);
-    target.fillCircle(85, 85, 75, TFT_BLACK);
-    if (milli != 0) target.fillArc(85, 85, 80, 75, 270, (milli*0.36)-90, MAGENTA);
-  } else {
-    target.fillCircle(85, 85, 80, MAGENTA);
-    target.fillCircle(85, 85, 75, TFT_BLACK);
-    if (milli != 0) target.fillArc(85, 85, 80, 75, 270, (milli*0.36)-90, TFT_WHITE);
-  }
-  if (stwt_touchedTime != 0) {
-    target.fillArc(85, 85, 80, 75, 270, (stwt_touchedTime*0.36)-90, BLUE);
-  }
-  target.setFont(&fonts::Font4);
-  target.setTextColor(TFT_WHITE, TFT_BLACK);
-  target.drawCenterString(forceDigits(min, 2)+":"+forceDigits(sec, 2)+"."+forceDigits(milli, 3), 85, 65);
-  target.drawCenterString((String) (id+1), 85, 95);
-}
-
-void stopwatch_make(M5Canvas& target, uint8_t id) {
-  target.createSprite(170, 170);
-  stopwatch_redraw(target, id);
-}
-
-void stopwatch_init() {
-  cv_display.clear();
-  cv_stwt_top.createSprite(sizeX, 47);
-  cv_stwt_top.fillRect(0, 0, sizeX, 47, TFT_WHITE);
-  cv_stwt_top.setTextColor(TFT_BLACK, TFT_WHITE);
-  if (strcmp(lang, "ja") == 0) {
-    cv_stwt_top.drawCenterString("ストップウォッチ", sizeX/2, 9, &fonts::efontJA_24);
-  } else {
-    cv_stwt_top.drawCenterString("Stopwatch", sizeX/2, 9, &fonts::Font4);
-  }
-  uint16_t lightRed = M5.Display.color565(0xff, 0xaa, 0xaa);
-  cv_stwt_top.fillRect(0, 0, 54, 56, lightRed);
-  cv_stwt_top.setTextColor(BLACK, lightRed);
-  cv_stwt_top.drawString("<", 20, 10, &fonts::Font4);
-  cv_stwt_top.pushSprite(0, 17);
-  stwt_swipe = 0;
-  stwt_chosenAtScroll = 0;
-  stopwatch_make(cv_stwt1, 0);
-  stopwatch_make(cv_stwt2, 1);
-  stopwatch_make(cv_stwt3, 2);
-  stopwatch_make(cv_stwt4, 3);
-  stopwatch_make(cv_stwt5, 4);
-}
-
-void stopwatch_loop() {
-  updateDateTimeBat();
-  cv_dtime_bat.clear(TFT_BLACK);
-  cv_dtime_bat.setTextColor(TFT_WHITE, TFT_BLACK);
-  cv_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
-  if (isVbus()) { cv_dtime_bat.setTextColor(CYAN, TFT_BLACK); }
-  cv_dtime_bat.drawRightString(String(battery)+"%", sizeX, 0, &fonts::Font2);
-  cv_dtime_bat.pushSprite(0, 0);
-  cv_stwt_top.pushSprite(0, 17);
-  m5::touch_detail_t detail = M5.Touch.getDetail();
-  if (M5.BtnA.wasPressed()) {
-    appEnd();
-  } else if (M5.Touch.getCount() > 0 or detail.wasClicked()) {
-    stwt_chosenAtScroll = stwt_nextChosenAtScroll;
-    if (detail.y > 64) {
-      scrollsWhenTouch(detail, &stwt_swipe);
-      if (inLimit(detail.x, (sizeX/2)-85, (sizeX/2)+85) and inLimit(detail.y, (sizeY/2)-60, (sizeY/2)+110) and !stwt_afterReset and (stwt_swipe % sizeX) == 0) {
-        stwt_touchedID = round(stwt_swipe/sizeX);
-        stwt_touchedTime += prevLoopTime;
-        if (!stwt_wasTouched) {
-          if (stwts[stwt_touchedID] == 0) {
-            stwts[stwt_touchedID] = millis();
-          } else if (stwts_stop[stwt_touchedID] == 0) {
-            stwts_stop[stwt_touchedID] = millis();
-          } else {
-            stwts[stwt_touchedID] += millis()-stwts_stop[stwt_touchedID];
-            stwts_stop[stwt_touchedID] = 0;
-          }
-        }
-        stwt_wasTouched = true;
-        if (stwt_touchedTime > 1000) {
-          stwts[stwt_touchedID] = 0;
-          stwts_stop[stwt_touchedID] = 0;
-          stwt_touchedTime = 0;
-          stwt_afterReset = true;
-        }
-      }
-    } else if ((detail.y > 16) && (detail.wasClicked())) {
-      if (detail.x <= 34) {
-        appEnd();
-      }
-    }
-  } else {
-    scrollsWhenNotTouch(&stwt_swipe, 5, sizeX, &stwt_chosenAtScroll, &stwt_nextChosenAtScroll);
-    stwt_wasTouched = false;
-    stwt_afterReset = false;
-    stwt_touchedTime = 0;
-  }
-  if (inLimit(stwt_swipe, (sizeX*-1)+1, (sizeX*1)-1)) {
-    stopwatch_redraw(cv_stwt1, 0);
-    cv_stwt1.pushSprite((sizeX/2)-85-stwt_swipe, (sizeY/2)-50);
-  }
-  if (inLimit(stwt_swipe, (sizeX*0)+1, (sizeX*2)-1)) {
-    stopwatch_redraw(cv_stwt2, 1);
-    cv_stwt2.pushSprite((sizeX/2)+235-stwt_swipe, (sizeY/2)-50);
-  }
-  if (inLimit(stwt_swipe, (sizeX*1)+1, (sizeX*3)-1)) {
-    stopwatch_redraw(cv_stwt3, 2);
-    cv_stwt3.pushSprite((sizeX/2)+555-stwt_swipe, (sizeY/2)-50);
-  }
-  if (inLimit(stwt_swipe, (sizeX*2)+1, (sizeX*4)-1)) {
-    stopwatch_redraw(cv_stwt4, 3);
-    cv_stwt4.pushSprite((sizeX/2)+875-stwt_swipe, (sizeY/2)-50);
-  }
-  if (inLimit(stwt_swipe, (sizeX*3)+1, (sizeX*5)-1)) {
-    stopwatch_redraw(cv_stwt5, 4);
-    cv_stwt5.pushSprite((sizeX/2)+1195-stwt_swipe, (sizeY/2)-50);
-  }
-  cv_display.pushSprite(0, 0);
-}
+extern void stopwatch_init();
+extern void stopwatch_loop();
 
 // Train
-String timetableName = "";
-bool train_isMainUI = false;
-int32_t train_refleshTimer;
-bool isWeekend;
-bool isRemainingMode = false;
-
-void train_config();
-void train_switch_week();
-void train_switch_mode();
-
-void train_init() {
-  train_isMainUI = true;
-  train_refleshTimer = 0;
-  appUI.reset();
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("Train");
-  appUI.addLocaleToTitle("ja", "時刻表");
-  appUI.addItem("config", train_config, "Set Timetable");
-  appUI.addLocaleToItem("config", "ja", "時刻表を設定");
-  appUI.addItem("switch_week", train_switch_week);
-  appUI.addItem("switch_mode", train_switch_mode);
-  if (isRemainingMode) {
-    appUI.addLocaleToItem("switch_mode", "en", "Rem. Minutes");
-    appUI.addLocaleToItem("switch_mode", "ja", "残り時間（分）");
-  } else {
-    appUI.addLocaleToItem("switch_mode", "en", "Time");
-    appUI.addLocaleToItem("switch_mode", "ja", "時刻");
-  }
-  if (dateTime.date.weekDay == 0 || dateTime.date.weekDay == 6 || isHoliday(dateTime.date.month, dateTime.date.date, dateTime.date.year, dateTime.date.weekDay)) {
-    isWeekend = true;
-    appUI.addLocaleToItem("switch_week", "en", "Weekend");
-    appUI.addLocaleToItem("switch_week", "ja", "休日");
-  } else {
-    isWeekend = false;
-    appUI.addLocaleToItem("switch_week", "en", "Weekday");
-    appUI.addLocaleToItem("switch_week", "ja", "平日");
-  }
-  appUI.addItem("train1", nothing);
-  appUI.addItem("train2", nothing);
-  appUI.addItem("train3", nothing);
-  appUI.linkFunctionToBack(appEnd);
-  appUI.makeUI(lang);
-}
-
-void train_switch_week() {
-  if (isWeekend) {
-    isWeekend = false;
-    appUI.addLocaleToItem("switch_week", "en", "Weekday");
-    appUI.addLocaleToItem("switch_week", "ja", "平日");
-  } else {
-    isWeekend = true;
-    appUI.addLocaleToItem("switch_week", "en", "Weekend");
-    appUI.addLocaleToItem("switch_week", "ja", "休日");
-  }
-  appUI.makeUI(lang);
-}
-
-void train_switch_mode() {
-  if (isRemainingMode) {
-    isRemainingMode = false;
-    appUI.addLocaleToItem("switch_mode", "en", "Time");
-    appUI.addLocaleToItem("switch_mode", "ja", "時刻");
-  } else {
-    isRemainingMode = true;
-    appUI.addLocaleToItem("switch_mode", "en", "Rem. Minutes");
-    appUI.addLocaleToItem("switch_mode", "ja", "残り時間（分）");
-  }
-  appUI.makeUI(lang);
-}
-
-void train_setTimetable(String name) {
-  timetableName = name;
-  train_init();
-  train_isMainUI = true;
-}
-
-void train_config() {
-  train_isMainUI = false;
-  appUI.reset();
-  appUI.setLocaleFont("en", 1);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("Set Timetable");
-  appUI.addLocaleToTitle("ja", "時刻表を設定");
-  for ( JsonPair loopTimetableName : trainJson["timetable"].as<JsonObject>() ) {
-    const char* nameBuffer = loopTimetableName.key().c_str();
-    appUI.addItem(nameBuffer, train_setTimetable);
-  }
-  appUI.linkFunctionToBack(train_init);
-  appUI.makeUI(lang);
-}
-
-void train_loop() {
-  if (train_refleshTimer == 0 && train_isMainUI) {
-    if (timetableName == "") {
-      appUI.addLocaleToItem("train1", "en", "If a timetable is set, ");
-      appUI.addLocaleToItem("train2", "en", "the next train or");
-      appUI.addLocaleToItem("train3", "en", "bus appears here.");
-      appUI.addLocaleToItem("train1", "ja", "時刻表を設定すると");
-      appUI.addLocaleToItem("train2", "ja", "ここに次の電車やバスを");
-      appUI.addLocaleToItem("train3", "ja", "表示できます。");
-      appUI.setItemColor("train1", TFT_LIGHTGRAY);
-      appUI.setItemColor("train2", TFT_LIGHTGRAY);
-      appUI.setItemColor("train3", TFT_LIGHTGRAY);
-      appUI.addRightLocaleToItem("train1", "en", "");
-      appUI.addRightLocaleToItem("train2", "en", "");
-      appUI.addRightLocaleToItem("train3", "en", "");
-    } else {
-      uint8_t min[3] = {60, 60, 60};
-      String dest[3] = {"?", "?", "?"};
-      String type[3] = {"?", "?", "?"};
-      int8_t hourAdd[3] = {-1, -1, -1};
-      JsonDocument timetable;
-      if (isWeekend) {
-        timetable = trainJson["timetable"][timetableName]["weekends"];
-      } else {
-        timetable = trainJson["timetable"][timetableName]["weekdays"];
-      }
-      String StrJson = timetable[5];
-      for ( const JsonObject loopTimetable : timetable[String(dateTime.time.hours)].as<JsonArray>() ) {
-        uint8_t timetableMin = loopTimetable["m"];
-        if (timetableMin > dateTime.time.minutes) {
-          String dest_buffer = loopTimetable["d"];
-          String type_buffer = loopTimetable["t"];
-          if (timetableMin < min[0]) {
-            min[0] = timetableMin;
-            dest[0] = dest_buffer;
-            type[0] = type_buffer;
-            hourAdd[0] = 0;
-          } else if (timetableMin < min[1]) {
-            min[1] = timetableMin;
-            dest[1] = dest_buffer;
-            type[1] = type_buffer;
-            hourAdd[1] = 0;
-          } else if (timetableMin < min[2]) {
-            min[2] = timetableMin;
-            dest[2] = dest_buffer;
-            type[2] = type_buffer;
-            hourAdd[2] = 0;
-          }
-        }
-      }
-      int32_t loopHourAdd = 0;
-      while (min[2] == 60) {
-        loopHourAdd = (loopHourAdd+1)%24;
-        for ( const JsonObject loopTimetable : timetable[String(dateTime.time.hours+loopHourAdd)].as<JsonArray>() ) {
-          uint8_t timetableMin = loopTimetable["m"];
-          String dest_buffer = loopTimetable["d"];
-          String type_buffer = loopTimetable["t"];
-          if (timetableMin < min[0] && (hourAdd[0] == -1 || hourAdd[0] == loopHourAdd)) {
-            min[0] = timetableMin;
-            dest[0] = dest_buffer;
-            type[0] = type_buffer;
-            hourAdd[0] = loopHourAdd;
-          } else if (timetableMin < min[1] && (hourAdd[1] == -1 || hourAdd[1] == loopHourAdd)) {
-            min[1] = timetableMin;
-            dest[1] = dest_buffer;
-            type[1] = type_buffer;
-            hourAdd[1] = loopHourAdd;
-          } else if (timetableMin < min[2] && (hourAdd[2] == -1 || hourAdd[2] == loopHourAdd)) {
-            min[2] = timetableMin;
-            dest[2] = dest_buffer;
-            type[2] = type_buffer;
-            hourAdd[2] = loopHourAdd;
-          }
-        }
-      }
-      uint8_t colors[3][3] = {{255, 255, 255}, {255, 255, 255}, {255, 255, 255}};
-      for (uint8_t i = 0; i < 3; i++) {
-        if (!trainJson["color"][type[i]].isNull()) {
-          for (uint8_t j = 0; j < 3; j++) {
-            colors[i][j] = trainJson["color"][type[i]][j];
-          }
-        }
-      }
-      appUI.setItemColor("train1", (colors[0][0]*65536)+(colors[0][1]*256)+(colors[0][2]));
-      appUI.addLocaleToItem("train1", "en", type[0]+" "+dest[0]);
-      appUI.setItemColor("train2", (colors[1][0]*65536)+(colors[1][1]*256)+(colors[1][2]));
-      appUI.addLocaleToItem("train2", "en", type[1]+" "+dest[1]);
-      appUI.setItemColor("train3", (colors[2][0]*65536)+(colors[2][1]*256)+(colors[2][2]));
-      appUI.addLocaleToItem("train3", "en", type[2]+" "+dest[2]);
-      if (isRemainingMode) {
-        appUI.addRightLocaleToItem("train1", "en", String(min[0]-dateTime.time.minutes+(hourAdd[0]*60)));
-        appUI.addRightLocaleToItem("train2", "en", String(min[1]-dateTime.time.minutes+(hourAdd[1]*60)));
-        appUI.addRightLocaleToItem("train3", "en", String(min[2]-dateTime.time.minutes+(hourAdd[2]*60)));
-      } else {
-        appUI.addRightLocaleToItem("train1", "en", String(dateTime.time.hours+hourAdd[0])+":"+forceDigits(min[0], 2));
-        appUI.addRightLocaleToItem("train2", "en", String(dateTime.time.hours+hourAdd[1])+":"+forceDigits(min[1], 2));
-        appUI.addRightLocaleToItem("train3", "en", String(dateTime.time.hours+hourAdd[2])+":"+forceDigits(min[2], 2));
-      }
-    }
-    appUI.makeUI(lang);
-  }
-  train_refleshTimer++;
-  if (train_refleshTimer >= 10) {
-    train_refleshTimer = 0;
-  }
-  appUI.update(dateTime, battery, getBatteryVoltage());
-}
+extern void train_init();
+extern void train_loop();
 
 // Timer
-bool timer_isMain = true;
-uint8_t timer_editing = 0;
-long timer_editingMillis = 0;
+extern void timer_init();
+extern void timer_loop();
 
-void timer_init();
-void timer_make();
-void timer_start();
-void timer_edit(String id);
-void timer_remove();
-void timer_loop();
-
-void timer_init() {
-  timer_editing = 0;
-  train_isMainUI = true;
-  train_refleshTimer = 0;
-  appUI.reset();
-  appUI.setTitle("Timer");
-  appUI.addLocaleToTitle("ja", "タイマー");
-  appUI.setLocaleFont("en", 1);
-  appUI.setLocaleFont("ja", 1);
-  appUI.addItem("add", timer_make, "+ Add Timer");
-  appUI.addLocaleToItem("add", "ja", "+ タイマーを追加");
-  uint8_t cnt = 1;
-  for(auto i = timers.begin(); i != timers.end(); i++ ) {
-    uint32_t remains = (*i - millis())/1000;
-    appUI.addItem(String(cnt), timer_edit, "en", String((uint8_t) floor((remains)/60))+":"+String((remains)%60));
-    cnt++;
-  }
-  appUI.linkFunctionToBack(appEnd);
-  appUI.makeUI(lang);
-}
-
-void timer_make() {
-  appUI.reset();
-  appUI.setTitle("Set Timer");
-  appUI.setLocaleFont("en", 1);
-  appUI.setLocaleFont("ja", 1);
-  appUI.addLocaleToTitle("ja", "タイマーをセット");
-  appUI.setTransparentMode(true);
-  UIAddtional = UI_TIME;
-  UIAddtionalSettings = TIMEUI_MODE_MINSEC;
-  cv_uiadditional.createSprite(300, 165);
-  UItimeLeft = alarmJson[alarm_toConfig]["hour"];
-  UItimeRight = alarmJson[alarm_toConfig]["min"];
-  M5.Display.fillRect(0, 65, sizeX, sizeY, TFT_BLACK);
-  drawTimeUI();
-  appUI.linkFunctionToBack(timer_start);
-  appUI.makeUI(lang);
-}
-
-void timer_start() {
-  UIAddtional = UI_NOTHING;
-  cv_uiadditional.deleteSprite();
-  uint16_t timerTime = ((UItimeLeft*60) + (UItimeRight));
-  timers.push_back((timerTime*1000)+millis());
-  timer_init();
-}
-
-void timer_edit(String id) {
-  appUI.reset();
-  timer_editing = id.toInt();
-  timer_editingMillis = *std::next(timers.begin(), timer_editing-1);
-  uint32_t remains = (timer_editingMillis - millis())/1000;
-  appUI.setTitle("Edit Timer");
-  appUI.setLocaleFont("en", 1);
-  appUI.setLocaleFont("ja", 1);
-  appUI.addLocaleToTitle("ja", "タイマーを編集");
-  appUI.addItem("timer", nothing, String((uint8_t) floor(remains/60))+":"+String(remains%60));
-  appUI.addItem("remove", timer_remove, "Remove Timer");
-  appUI.addLocaleToItem("remove", "ja", "タイマーを削除");
-  appUI.linkFunctionToBack(timer_init);
-  appUI.makeUI(lang);
-}
-
-void timer_remove() {
-  timers.erase(std::next(timers.begin(), timer_editing-1));
-  timer_init();
-}
-
-void timer_loop() {
-  if (!timers.empty() && timer_isMain) {
-    uint8_t cnt = 1;
-    for(auto i = timers.begin(); i != timers.end(); i++ ) {
-      uint32_t remains = (*i - millis())/1000;
-      appUI.addLocaleToItem(String(cnt), "en", String((uint8_t) floor((remains)/60))+":"+String((remains)%60));
-      cnt++;
-    }
-    appUI.makeUI(lang);
-  } else if (timer_editing != 0) {
-    uint32_t remains = (timer_editingMillis - millis())/1000;
-    appUI.addLocaleToItem("timer", "en", String((uint8_t) floor((remains)/60))+":"+String((remains)%60));
-    appUI.makeUI(lang);
-  }
-  appUI.update(dateTime, battery, getBatteryVoltage());
-}
-
-// random
-uint8_t random_number;
-uint8_t random_maxNumber;
-uint8_t random_prevNumber;
-uint8_t random_countdown = 0;
-
-void random_init();
-void random_loop();
-void random_wheel(String number);
-
-void random_init() {
-  appUI.reset();
-  UIAddtional = UI_NOTHING;
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("Random");
-  appUI.addLocaleToTitle("ja", "ランダム");
-  for (uint8_t i = 2; i < 11; i++) {
-    appUI.addItem(String(i), random_wheel, "1d"+String(i));
-  }
-  appUI.addItem("100", random_wheel, "1d100");
-  appUI.linkFunctionToBack(appEnd);
-  appUI.makeUI(lang);
-}
-
-void random_loop() {
-  appUI.update(dateTime, battery, getBatteryVoltage());
-  
-  if (UIAddtional == UI_RANDOM) {
-    cv_uiadditional.clear();
-    cv_uiadditional.setTextColor(TFT_WHITE, TFT_BLACK);
-    cv_uiadditional.drawCenterString("1d"+String(random_maxNumber), 150, 10, &fonts::Font4);
-    if (M5.Touch.getDetail().wasClicked()) {
-      random_number = random(1, random_maxNumber+1);
-      random_countdown = 10;
-    } else if (random_countdown > 0) {
-      random_countdown--;
-      uint8_t CDNumber = random(1, random_maxNumber);
-      if (CDNumber >= random_prevNumber) CDNumber++;
-      cv_uiadditional.setTextColor(TFT_GRAY, TFT_BLACK);
-      cv_uiadditional.drawCenterString(String(CDNumber), 150, 80, &fonts::Font6);
-      random_prevNumber = CDNumber;
-    } else {
-      cv_uiadditional.drawCenterString(String(random_number), 150, 80, &fonts::Font6);
-    }
-    cv_uiadditional.pushSprite(centerX-150, centerY-50);
-  }
-}
-
-void random_wheel(String number) {
-  appUI.reset();
-  random_number = number.toInt();
-  appUI.setTitle("Wheel "+number);
-  appUI.addLocaleToTitle("ja", "ルーレット "+number);
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTransparentMode(true);
-  UIAddtional = UI_RANDOM;
-  random_maxNumber = number.toInt();
-  random_number = random(1, random_maxNumber+1);
-  random_prevNumber = random(1, random_maxNumber+1);
-  random_countdown = 10;
-  M5.Display.fillRect(0, 65, sizeX, sizeY, TFT_BLACK);
-  cv_uiadditional.createSprite(300, 165);
-  appUI.linkFunctionToBack(random_init);
-  appUI.makeUI(lang);
-}
+// Random
+extern void random_init();
+extern void random_loop();
 
 // Ext.Devices
-void edev_init();
-void edev_loop();
-
-void edev_init() {
-  appUI.reset();
-  appUI.setLocaleFont("en", 0);
-  appUI.setLocaleFont("ja", 1);
-  appUI.setTitle("External Devices");
-  appUI.addLocaleToTitle("ja", "外部デバイス");
-  appUI.addItem("reload", nothing, "WIP");
-  appUI.addLocaleToItem("reload", "ja", "開発中");
-  appUI.linkFunctionToBack(appEnd);
-  appUI.makeUI(lang);
-}
-
-void edev_loop() {
-  appUI.update(dateTime, battery, getBatteryVoltage());
-}
+extern void edev_init();
+extern void edev_loop();
 
 // Draw analog clock face with battery ring and rotating hour/minute hands
 void updateClock() {
@@ -2316,7 +848,7 @@ void updateClock() {
   uint8_t arcSize;
   if (dialType == DIAL_ZERODIAL) arcSize = 20;
   else arcSize = 108;
-  if (isVbus()) {
+  if (M5.Power.Axp2101.isVBUS()) {
     cv_clock.fillArc(ckCenterX, ckCenterY, arcSize+1, arcSize, 270, (battery*3.6)-90.5, CYAN);
   } else {
     cv_clock.fillArc(ckCenterX, ckCenterY, arcSize+1, arcSize, 270, (battery*3.6)-90.5, batcolor(battery));
@@ -2332,12 +864,18 @@ void updateClock() {
   cv_clock.fillCircle(ckCenterX, ckCenterY, 5, TFT_BLACK);
 }
 
+void drawUpdate() {
+  cv_day.setTextColor(TFT_RED, TFT_BLACK);
+  String dayName = "Update Available: "+getVersionString(latestVer);
+  cv_day.drawString(dayName, 0, 17, &fonts::Font2); 
+}
+
 // Update digital time display (HH:MM:SS), battery indicator, and special date info
 void updateDigitals() {
   cv_dtime_bat.clear();
   cv_dtime_bat.setTextColor(TFT_WHITE, TFT_BLACK);
   cv_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
-  if (isVbus()) { cv_dtime_bat.setTextColor(CYAN, TFT_BLACK); }
+  if (M5.Power.Axp2101.isVBUS()) { cv_dtime_bat.setTextColor(CYAN, TFT_BLACK); }
   if (showVoltage) {
     cv_dtime_bat.drawRightString(String(battery)+"% - "+String((float) M5.Power.getBatteryVoltage()/1000, 2)+"V", sizeX, 0, &fonts::Font2);
   } else {
@@ -2358,28 +896,26 @@ void updateDigitals() {
         }
       }
       if (birthChangeID == birthdayCount) {
-        cv_day.setTextColor(TFT_RED, TFT_BLACK);
-        String dayName = "Update Available: "+getVersionString(latestVer);
-        cv_day.drawString(dayName, 0, 17, &fonts::Font2);
+        drawUpdate();
       } else {
-        int32_t dayColor = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color"];
-        cv_day.setTextColor(M5.Display.color24to16(dayColor), TFT_BLACK);
+        //int32_t dayColor = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color"];
+        //cv_day.setTextColor(M5.Display.color24to16(dayColor), TFT_BLACK);
+        cv_day.setTextColor(TFT_WHITE, TFT_BLACK);
         String dayName = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["name"];
         cv_day.drawString(dayName, 0, 17, &fonts::Font2);
+        uint16_t dayColor1 = cv_day.color24to16(spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color1"]);
+        uint16_t dayColor2 = cv_day.color24to16(spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color2"]);
+        gradientMask(&cv_day, 0, 17, cv_day.textWidth(dayName, &fonts::Font2), 17, dayColor1, dayColor2, TFT_WHITE);
       }
     } else if (newVerAvailable) {
       dateY = 0;
-      cv_day.setTextColor(TFT_RED, TFT_BLACK);
-      String dayName = "Update Available: "+getVersionString(latestVer);
-      cv_day.drawString(dayName, 0, 17, &fonts::Font2);
+      drawUpdate();
     } else {
       dateY = 17;
     }
   } else if (newVerAvailable) {
     dateY = 0;
-    cv_day.setTextColor(TFT_RED, TFT_BLACK);
-    String dayName = "Update Available: "+getVersionString(latestVer);
-    cv_day.drawString(dayName, 0, 17, &fonts::Font2);
+    drawUpdate();
   } else {
     dateY = 17;
   }
@@ -2553,12 +1089,17 @@ void setupConfigs() {
   M5.Display.setTextColor(SKYBLUE, TFT_BLACK);
   M5.Display.println("MK75-Watch");
   M5.Display.setTextColor(WHITE, TFT_BLACK);
-  M5Model = getModel();
+  modelType = M5.getBoard();
+  M5Model = getModel(modelType);
   M5.Display.print("Model: ");
-  if (modelType == 2 || modelType == 10) {
+  if (modelType == m5::board_t::board_M5StackCore2 || modelType == m5::board_t::board_M5StackCoreS3) {
     M5.Display.setTextColor(GREEN, TFT_BLACK);
     M5.Display.println(M5Model);
     M5.Display.println("Supported Model");
+  } else if (modelType == m5::board_t::board_M5StackCoreS3SE) {
+    M5.Display.setTextColor(YELLOW, TFT_BLACK);
+    M5.Display.println(M5Model);
+    M5.Display.println("Semi-Supported Model");
   } else {
     M5.Display.setTextColor(RED, TFT_BLACK);
     M5.Display.println(M5Model);
@@ -2659,27 +1200,27 @@ void drawMenu() {
 void loopSleep() {
   bool touch = M5.Touch.getCount() > 0;
   if ((touch) or (vibTimer > millis())) {
-    if (isVbus() and slpTimer > sleepTimings_sys[0]) slpTimer = sleepTimings_sys[0];
+    if (M5.Power.Axp2101.isVBUS() and slpTimer > sleepTimings_sys[0]) slpTimer = sleepTimings_sys[0];
     else if (slpTimer > sleepTimings_sys[1]) slpTimer = sleepTimings_sys[1];
-  } else if (checkGyro() and (!isVbus()) and (slpTimer > sleepTimings_sys[3])) {
+  } else if (checkGyro() and (!M5.Power.Axp2101.isVBUS()) and (slpTimer > sleepTimings_sys[3])) {
     slpTimer = sleepTimings_sys[3];
   } else {
     slpTimer += prevLoopTime;
     if (slpTimer >= 60000 || M5.BtnPWR.getState() == m5::Button_Class::state_clicked) {
-      bool charged = isVbus();
+      bool charged = M5.Power.Axp2101.isVBUS();
       if (charged) {
         lowPowSleep();
       } else {
         activeSleep();
       }
-      if (isVbus() and !charged) {
+      if (M5.Power.Axp2101.isVBUS() and !charged) {
         vibTimer = 500;
         M5.Power.setVibration(127);
       }
       afterSlp = true;
       M5.Display.wakeup();
       M5.Display.setBrightness(255*((screenBrightness+1)/10.0));
-      if (isVbus()) slpTimer = sleepTimings_sys[0];
+      if (M5.Power.Axp2101.isVBUS()) slpTimer = sleepTimings_sys[0];
       else slpTimer = sleepTimings_sys[1];
     }
   }
@@ -2692,9 +1233,9 @@ void loopSleep() {
 // Handle menu swipe gestures and app selection
 void loopMenuTouch() {
   if (!afterSlp) {
-    if (M5.Touch.getCount() > 0 || touchInterrupted) {
+    if (M5.Touch.getCount() > 0) {
       m5::Touch_Class::touch_detail_t tDetail = M5.Touch.getDetail();
-      if (touchInterrupted) {
+      if (tDetail.wasClicked() and tDetail.y < 240) {
         touchedOnMenu = appMenu;
         for (int8_t i = 0; i < 4; i++) {
           prevSwipeAcc[i] = 0;
@@ -2735,7 +1276,7 @@ void loopMenuTouch() {
       }
       touchInterrupted = false;
     } else {
-      scrollsWhenNotTouch(&screenSwipeVertical, howManyApps, 120, &chosenAtScroll, &nextChosenAtScroll, false, 5, 10);
+      scrollsWhenNotTouch(&screenSwipeVertical, howManyApps, 120, false, 5, 10);
     }
   }
 }
@@ -2830,9 +1371,9 @@ void setup() {
   setupConfigs();
   setupSprites();
   //setupMenu();
-  wasVBUS = isVbus();
+  wasVBUS = M5.Power.Axp2101.isVBUS();
   compatibleAttachInterrupt();
-  bool powered = isVbus();
+  bool powered = M5.Power.Axp2101.isVBUS();
   if (powered) slpTimer = sleepTimings_sys[0];
   else slpTimer = sleepTimings_sys[1];
   updateExtOutput(true, powered);
@@ -2856,7 +1397,7 @@ void loop() {
   //SFE.update();
   doDraw = true;
   bool touch = (M5.Touch.getCount() > 0);
-  bool powered = isVbus();
+  bool powered = M5.Power.Axp2101.isVBUS();
   if (doSleep[powered]) {
     loopSleep();
   } else {

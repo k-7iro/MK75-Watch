@@ -35,8 +35,8 @@ class UI {
     void addLocaleToItem(String id, const char lang[3], String name);
     void addRightLocaleToItem(String id, const char lang[3], String name);
     void addLocaleToTitle(const char lang[3], String name);
-    void setItemColor(String id, uint32_t color);
-    void setItemRightColor(String id, uint32_t color);
+    void setItemColor(String id, uint16_t color);
+    void setItemRightColor(String id, uint16_t color);
     void setLocaleFont(const char lang[3], uint8_t font);
     void linkFunctionToBack(pFunc func);
     void linkFunctionToItem(String id, pFunc func);
@@ -59,8 +59,8 @@ class UI {
     std::list<String> items;
     std::map<String, std::map<String, String>> itemLocale;
     std::map<String, std::map<String, String>> itemRightLocale;
-    std::map<String, uint32_t> itemColor;
-    std::map<String, uint32_t> itemRightColor;
+    std::map<String, uint16_t> itemColor;
+    std::map<String, uint16_t> itemRightColor;
     std::map<String, pFunc> itemFunction;
     std::map<String, pArgFunc> itemArgFunction;
     std::map<String, bool> itemUseArgFunction;
@@ -72,19 +72,19 @@ class UI {
     M5Canvas top_dtime_bat = M5Canvas(&top);
 };
 
-void UI::setTitle(String title) {
+inline void UI::setTitle(String title) {
   titleLocale["en"] = title;
 }
 
-void UI::setTitle(String title, const char lang[3]) {
+inline void UI::setTitle(String title, const char lang[3]) {
   titleLocale[lang] = title;
 }
 
-void UI::makeUI() {
+inline void UI::makeUI() {
   makeUI("en");
 }
 
-void UI::makeUI(const char lang[3]) {
+inline void UI::makeUI(const char lang[3]) {
   int width = M5.Display.width();
   int height = M5.Display.height();
   int UIHeight;
@@ -147,7 +147,7 @@ void UI::makeUI(const char lang[3]) {
   }
 }
 
-void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat) {
+inline void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat) {
   if (firstTouch == 0) {
     uint8_t rowSize = (space*2)+26;
     uint16_t height = M5.Display.height();
@@ -228,101 +228,101 @@ void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat) {
   }
 }
 
-void UI::addItem(String id) {
+inline void UI::addItem(String id) {
   addItem(id, id);
 }
 
-void UI::addItem(String id, String defName) {
+inline void UI::addItem(String id, String defName) {
   addItem(id, defName, "en");
 }
 
-void UI::addItem(String id, String defName, String defLang) {
+inline void UI::addItem(String id, String defName, String defLang) {
   items.push_back(id);
   itemLocale[id][defLang] = defName;
   itemRightLocale[id][defLang] = "";
-  itemColor[id] = 16777215;
-  itemRightColor[id] = 16776960;
+  itemColor[id] = TFT_WHITE;
+  itemRightColor[id] = TFT_YELLOW;
   itemUseArgFunction[id] = false;
 }
 
-void UI::addItem(String id, pFunc func) {
+inline void UI::addItem(String id, pFunc func) {
   addItem(id);
   itemFunction[id] = func;
 }
 
-void UI::addItem(String id, pFunc func, String defName) {
+inline void UI::addItem(String id, pFunc func, String defName) {
   addItem(id, defName);
   itemFunction[id] = func;
 }
 
-void UI::addItem(String id, pFunc func, String defName, String defLang) {
+inline void UI::addItem(String id, pFunc func, String defName, String defLang) {
   addItem(id, defName, defLang);
   itemFunction[id] = func;
 }
 
-void UI::addItem(String id, pArgFunc func) {
+inline void UI::addItem(String id, pArgFunc func) {
   addItem(id);
   itemArgFunction[id] = func;
   itemUseArgFunction[id] = true;
 }
 
-void UI::addItem(String id, pArgFunc func, String defName) {
+inline void UI::addItem(String id, pArgFunc func, String defName) {
   addItem(id, defName);
   itemArgFunction[id] = func;
   itemUseArgFunction[id] = true;
 }
 
-void UI::addItem(String id, pArgFunc func, String defName, String defLang) {
+inline void UI::addItem(String id, pArgFunc func, String defName, String defLang) {
   addItem(id, defName, defLang);
   itemArgFunction[id] = func;
   itemUseArgFunction[id] = true;
 }
 
-void UI::addLocaleToItem(String id, const char lang[3], String name) {
+inline void UI::addLocaleToItem(String id, const char lang[3], String name) {
   itemLocale[id][lang] = name;
 }
 
-void UI::addRightLocaleToItem(String id, const char lang[3], String name) {
+inline void UI::addRightLocaleToItem(String id, const char lang[3], String name) {
   itemRightLocale[id][lang] = name;
 }
 
-void UI::addLocaleToTitle(const char lang[3], String name) {
+inline void UI::addLocaleToTitle(const char lang[3], String name) {
   titleLocale[lang] = name;
 }
 
-void UI::setItemColor(String id, uint32_t color) {
+inline void UI::setItemColor(String id, uint16_t color) {
   itemColor[id] = color;
 }
 
-void UI::setItemRightColor(String id, uint32_t color) {
+inline void UI::setItemRightColor(String id, uint16_t color) {
   itemRightColor[id] = color;
 }
 
-void UI::setLocaleFont(const char lang[3], uint8_t font) {
+inline void UI::setLocaleFont(const char lang[3], uint8_t font) {
   localeFont[lang] = font;
 }
 
-void UI::linkFunctionToBack(pFunc func) {
+inline void UI::linkFunctionToBack(pFunc func) {
   backFunction = func;
 }
 
-void UI::linkFunctionToItem(String id, pFunc func) {
+inline void UI::linkFunctionToItem(String id, pFunc func) {
   itemFunction[id] = func;
 }
 
-void UI::linkArgFunctionToItem(String id, pArgFunc func) {
+inline void UI::linkArgFunctionToItem(String id, pArgFunc func) {
   itemArgFunction[id] = func;
 }
 
-void UI::setUseArgFunctionToItem(String id, bool useArgFunction) {
+inline void UI::setUseArgFunctionToItem(String id, bool useArgFunction) {
   itemUseArgFunction[id] = useArgFunction;
 }
 
-void UI::setTransparentMode(bool mode) {
+inline void UI::setTransparentMode(bool mode) {
   transparentMode = mode;
 }
 
-void UI::reset() {
+inline void UI::reset() {
   scroll = 0;
   scrollAccel[0] = 0;
   scrollAccel[1] = 0;

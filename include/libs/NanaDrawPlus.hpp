@@ -12,7 +12,7 @@
 #define SQRT_2_DIV_2 0.70710678118
 
 /* I may or may not use it in the future.
-int32_t mixColor888(int32_t color1, int32_t color2, float ratio) {
+inline int32_t mixColor888(int32_t color1, int32_t color2, float ratio) {
     if (ratio <= 0) return color2;
     if (ratio >= 1) return color1;
     uint8_t red = ((color1 >> 24)*(ratio))+((color2 >> 24)*(1-ratio));
@@ -23,7 +23,7 @@ int32_t mixColor888(int32_t color1, int32_t color2, float ratio) {
 }
 */
 
-uint16_t mixColor(uint16_t color1, uint16_t color2, float ratio) {
+inline uint16_t mixColor(uint16_t color1, uint16_t color2, float ratio) {
     if (ratio <= 0) return color1;
     if (ratio >= 1) return color2;
     uint8_t red = ((color1 >> 11)*(1-ratio))+((color2 >> 11)*(ratio));
@@ -32,7 +32,7 @@ uint16_t mixColor(uint16_t color1, uint16_t color2, float ratio) {
     return (red << 11)+(green << 5)+blue;
 }
 
-void drawCircleWithAA(LovyanGFX *target, int32_t x, int32_t y, int32_t radius, int16_t color, int16_t outColor) {
+inline void drawCircleWithAA(LovyanGFX *target, int32_t x, int32_t y, int32_t radius, int16_t color, int16_t outColor) {
     int32_t startX = max(0, x-radius);
     int32_t startY = max(0, y-radius);
     int32_t endX = min(target->width(), x+radius);
@@ -80,41 +80,14 @@ void drawCircleWithAA(LovyanGFX *target, int32_t x, int32_t y, int32_t radius, i
     target->endWrite();
 }
 
-void drawCircleWithAAOld(LovyanGFX *target, int32_t x, int32_t y, int32_t radius, int16_t color, int16_t outColor) {
-    int32_t startX = max(0, x-radius);
-    int32_t startY = max(0, y-radius);
-    int32_t endX = min(target->width(), x+radius);
-    int32_t endY = min(target->height(), y+radius);
-    target->startWrite();
-    float prevBorder = radius;
-    for (int32_t ix = 0; ix <= radius; ix++) {
-        float border = sqrt(pow(radius, 2)-pow(ix, 2));
-        int32_t borderInt = floor(border);
-        int32_t borderIntCeil = borderInt+1;
-        for (int32_t iy = 0; iy <= radius; iy++) {
-            if (borderIntCeil == iy || (prevBorder > iy && iy > border)) {
-                int16_t mixedColor;
-                if (iy >= radius*(0.70710678118)) { // 1/√2
-                    float borderDeci = border-borderInt;
-                    mixedColor = mixColor(outColor, color, borderDeci);
-                } else {
-                    float border2 = sqrt(pow(radius, 2)-pow(iy, 2));
-                    int32_t border2Int = floor(border2);
-                    float border2Deci = border2-border2Int;
-                    mixedColor = mixColor(outColor, color, border2Deci);
-                }
-                target->drawPixel(x-ix, y-iy, mixedColor);
-                target->drawPixel(x+ix, y-iy, mixedColor);
-                target->drawPixel(x-ix, y+iy, mixedColor);
+inline void gradientMask(LovyanGFX *target, int32_t x, int32_t y, int32_t width, int32_t height, uint16_t color1, uint16_t color2, uint16_t colorMask) {
+    for (uint16_t ix = 0; ix < width; ix++) {
+        float ratioX = (float)ix/width;
+        int16_t mixedColor = mixColor(color1, color2, ratioX);
+        for (uint16_t iy = 0; iy < height; iy++) {
+            if (target->readPixel(x+ix, y+iy) == colorMask) {
                 target->drawPixel(x+ix, y+iy, mixedColor);
-            } else if (borderIntCeil > iy) {
-                target->drawPixel(x-ix, y-iy, color);
-                target->drawPixel(x+ix, y-iy, color);
-                target->drawPixel(x-ix, y+iy, color);
-                target->drawPixel(x+ix, y+iy, color);
             }
         }
-        prevBorder = border;
     }
-    target->endWrite();
 }

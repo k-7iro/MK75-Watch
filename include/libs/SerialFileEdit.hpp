@@ -28,7 +28,7 @@ class SerialFileEdit {
     std::list<String> parsed;
 };
 
-void SerialFileEdit::update() {
+inline void SerialFileEdit::update() {
   if (state == SFE_CONNECTED) {
     while (SFE_Stream->available()) {
       char c = SFE_Stream->read();
@@ -137,12 +137,12 @@ class SFE_HWS : public SerialFileEdit {
     HardwareSerial *SFE_HWSerial;
 };
 
-void SFE_HWS::begin(uint32_t baud) {
+inline void SFE_HWS::begin(uint32_t baud) {
   if (baud != 0) SFE_HWSerial->begin(baud);
   state = SFE_CONNECTED;
 }
 
-void SFE_HWS::end(bool endSerial) {
+inline void SFE_HWS::end(bool endSerial) {
   if (endSerial) SFE_HWSerial->end();
   if (editFile) editFile.close();
   state = SFE_IDLE;
@@ -158,12 +158,12 @@ class SFE_USB : public SerialFileEdit {
     HWCDC *SFE_HWCDC;
 };
 
-void SFE_USB::begin(uint32_t baud) {
+inline void SFE_USB::begin(uint32_t baud) {
   if (baud != 0) SFE_HWCDC->begin(baud);
   state = SFE_CONNECTED;
 }
 
-void SFE_USB::end(bool endSerial) {
+inline void SFE_USB::end(bool endSerial) {
   if (endSerial) SFE_HWCDC->end();
   if (editFile) editFile.close();
   state = SFE_IDLE;
