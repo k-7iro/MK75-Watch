@@ -51,17 +51,18 @@ void wifiConsole_loop() {
               String pass = getOption(parsed, "pass");
               bool skipTestWifi = checkOption(parsed, "skiptest");
               if (ssid == "") {
-                Serial.println("Error: SSID and password must be provided.");
+                Serial.println("Error: SSID must be provided.");
               } else {
                 if (!skipTestWifi) {
+                  Serial.println("Testing connection to SSID \"" + ssid + "\"...");
                   if (WiFi.status() == WL_CONNECTED) {
                     WiFi.disconnect(false);
                   }
                   WiFi.begin(ssid, pass);
                   int32_t timer = 0;
                   while (WiFi.status() != WL_CONNECTED and timer < 100){
-                      delay(100);
-                      timer++;
+                    delay(100);
+                    timer++;
                   }
                 }
                 if (WiFi.status() == WL_CONNECTED) {

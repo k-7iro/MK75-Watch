@@ -1402,7 +1402,7 @@ void loop() {
   } else {
     checkAlarmTimer += prevLoopTime;
   }
-  wifiConsole_loop();
+  if (M5.Power.Axp2101.isVBUS()) wifiConsole_loop();
   if (afterSlp) {
     afterSlp = false;
   } else {
