@@ -5,6 +5,7 @@ Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Mi
 - Removed the Wi-Fi setup wizard; Wi-Fi can now be configured via the serial monitor.
 - Added a "one-time" setting for alarms. Consequently, alarms disabled for both weekdays and weekends are now displayed in gray.
 - Slightly modified touch handling (implemented multi-core processing).
+- Added support for gradients to the display text for Special Dates.
 - Split the bloated source code into smaller files.
 
 
@@ -73,6 +74,7 @@ Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Mi
 - Wi-Fiのセットアップを削除し、シリアルモニタ経由でWi-Fiを登録可能にしました。
 - アラームにワンタイム設定を追加しました。それに伴い平日休日共に無効のアラームはグレーアウトして表示されるようになりました。
 - タッチの仕様を若干変更しました。（マルチコア化）
+- Special Datesの表示テキストをグラデーションに対応させました。
 - 肥大化したソースコードを分割しました。
 
 # Ver 26.7
