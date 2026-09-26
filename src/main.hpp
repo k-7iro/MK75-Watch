@@ -52,6 +52,7 @@ extern UI appUI;
 extern void appEnd();
 extern m5::rtc_datetime_t dateTime;
 extern uint8_t battery;
+extern int32_t slpTimer;
 extern uint16_t getBatteryVoltage();
 extern const int32_t sizeX;
 extern const int32_t centerX;
@@ -60,6 +61,8 @@ extern const int32_t centerY;
 extern char lang[3];
 extern bool writeSPIJson(String filename, JsonDocument *target);
 extern int32_t prevLoopTime;
+extern M5Canvas cv_display;
+extern M5Canvas cv_dtime_bat;
 
 // UIAdditional用
 extern uiaddtional_t UIAddtional;
@@ -102,12 +105,13 @@ extern uint8_t screenBrightness;
 extern uint8_t speakerVolume;
 extern uint8_t chargeCurrent;
 extern uint8_t chargeVoltage;
-extern dialtype_t dialType;
 extern uint16_t lastSync;
+extern dialtype_t dialType;
 
 // 6. ブール値 (bools)
 extern bool vibration;
 extern bool showVoltage;
+extern bool developerMode;
 
 // [交通時刻表用]
 extern JsonDocument trainJson;
@@ -116,14 +120,12 @@ extern JsonDocument trainJson;
 extern JsonDocument alarmJson;
 
 // [ストップウォッチ用]
-extern M5Canvas cv_display;
 extern M5Canvas cv_stwt1;
 extern M5Canvas cv_stwt2;
 extern M5Canvas cv_stwt3;
 extern M5Canvas cv_stwt4;
 extern M5Canvas cv_stwt5;
 extern M5Canvas cv_stwt_top;
-extern M5Canvas cv_dtime_bat;
 extern void updateDateTimeBat();
 extern void scrollsWhenTouch(m5::touch_detail_t detail, int32_t* target, bool vertical = false);
 extern void scrollsWhenNotTouch(int32_t* target, int32_t indexes, int32_t distant, bool useAcc = true, float speed = 2, uint8_t maxAccMulti = 10);

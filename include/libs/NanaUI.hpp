@@ -16,12 +16,25 @@ typedef void (*pFunc)(void);
 
 typedef void (*pArgFunc)(String);
 
+inline void updateDigitalTimeBat(M5Canvas* target, m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat) {
+  target->clear();
+  target->setTextColor(TFT_WHITE, TFT_BLACK);
+  target->drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
+  if (M5.Power.Axp2101.isVBUS()) { target->setTextColor(CYAN, TFT_BLACK); }
+  if (vbat != 65535) {
+    target->drawRightString(String(battery)+"% - "+String((float) vbat/1000, 2)+"V", 320, 0, &fonts::Font2);
+  } else {
+    target->drawRightString(String(battery)+"%", 320, 0, &fonts::Font2);
+  }
+}
+
 class UI {
   public:
     void setTitle(String title);
     void setTitle(String title, const char lang[3]);
     void makeUI();
     void makeUI(const char lang[3]);
+    void rePushSprite();
     void update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat);
     void addItem(String id);
     void addItem(String id, String defName);
@@ -147,6 +160,10 @@ inline void UI::makeUI(const char lang[3]) {
   }
 }
 
+inline void UI::rePushSprite() {
+  disp.pushSprite(0, 0, M5.Lcd.color565(16, 8, 16));
+}
+
 inline void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat) {
   if (firstTouch == 0) {
     uint8_t rowSize = (space*2)+26;
@@ -155,16 +172,7 @@ inline void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vb
     uint16_t cHeight = canv.height();
     uint8_t tHeight = top.height();
     uint8_t tdHeight = top_dtime_bat.height();
-    top_dtime_bat.clear(BLACK);
-    top_dtime_bat.setTextColor(WHITE, BLACK);
-    top_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
-    if (M5.Power.Axp2101.isVBUS()) { top_dtime_bat.setTextColor(CYAN, BLACK); }
-    if (vbat != 65535) {
-      top_dtime_bat.drawRightString(String(battery)+"% - "+String((float) M5.Power.getBatteryVoltage()/1000, 2)+"V", width, 0, &fonts::Font2);
-    } else {
-      top_dtime_bat.drawRightString(String(battery)+"%", width, 0, &fonts::Font2);
-    }
-    
+    updateDigitalTimeBat(&top_dtime_bat, dateTime, battery, vbat);
     top_dtime_bat.pushSprite(0, 0);
     canv.pushSprite(0, tHeight-scroll);
     top.pushSprite(0, 0);

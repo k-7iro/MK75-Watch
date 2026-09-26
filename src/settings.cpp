@@ -1,11 +1,16 @@
 #include <M5Unified.h>
 #include <M5GFX.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <Preferences.h>
+#include <LittleFS.h>
+#include <ArduinoJson.h>
+#include "main.hpp"
 #include "libs/NanaUI.hpp"
 #include "libs/NanaTools.hpp"
 #include "libs/NanaDrawPlus.hpp"
-#include "main.hpp"
+
+extern void wifiInitialSetup(bool cancelable);
 
 void settings_init();
 void settings_chooseLang();
@@ -42,15 +47,25 @@ void settings_setSleep(String slpTime);
 void settings_setAutoShutdown();
 void settings_chooseStyle();
 void settings_setStyle(String style);
+void settings_wifi();
+void settings_ssid(String ssid);
+void settings_removeSSID(String ssid);
 void settings_info();
+void settings_touchVersion();
 void settings_setYear(String year);
 void settings_save();
 void settings_syncTime();
+void settings_developer();
+void settings_dev_areYouSure_resetWiFi();
+void settings_dev_resetWiFi();
 void settings_loop();
 
-bool settings_saved = true;
+bool settings_changed = false;
+bool settings_wifiChanged = false;
 bool settings_choseBat = false;
 bool settings_choseGyro = false;
+
+uint8_t versionTouchCount = 0;
 
 void settings_init() {
   appUI.reset();
@@ -60,14 +75,14 @@ void settings_init() {
   appUI.addLocaleToTitle("ja", "設定");
   appUI.addItem("save", settings_save, "Save");
   appUI.addLocaleToItem("save", "ja", "保存");
-  if (settings_saved) {
-    appUI.addRightLocaleToItem("save", "en", "Saved");
-    appUI.addRightLocaleToItem("save", "ja", "保存済み");
-    appUI.setItemRightColor("save", TFT_GREEN);
-  } else {
+  if (settings_changed) {
     appUI.addRightLocaleToItem("save", "en", "Not Saved");
     appUI.addRightLocaleToItem("save", "ja", "未保存");
     appUI.setItemRightColor("save", TFT_RED);
+  } else {
+    appUI.addRightLocaleToItem("save", "en", "Saved");
+    appUI.addRightLocaleToItem("save", "ja", "保存済み");
+    appUI.setItemRightColor("save", TFT_GREEN);
   }
   appUI.addItem("lang", settings_chooseLang, "Change Language");
   appUI.addLocaleToItem("lang", "ja", "言語変更");
@@ -79,8 +94,14 @@ void settings_init() {
   appUI.addLocaleToItem("display", "ja", "ディスプレイと外観");
   appUI.addItem("notice", settings_notice, "Notices");
   appUI.addLocaleToItem("notice", "ja", "通知");
+  appUI.addItem("wifi", settings_wifi, "Wi-Fi Settings");
+  appUI.addLocaleToItem("wifi", "ja", "Wi-Fi設定");
   appUI.addItem("verinfo", settings_info, "Infomation");
   appUI.addLocaleToItem("verinfo", "ja", "情報");
+  if (developerMode) {
+    appUI.addItem("developer", settings_developer, "For Developers");
+    appUI.addLocaleToItem("developer", "ja", "開発者向け");
+  }
   appUI.linkFunctionToBack(appEnd);
   appUI.makeUI(lang);
 }
@@ -97,7 +118,7 @@ void settings_chooseLang() {
 void settings_setLang(String langTarget) {
   lang[0] = langTarget.charAt(0);
   lang[1] = langTarget.charAt(1);
-  settings_saved = false;
+  settings_changed = true;
   settings_init();
 }
 
@@ -242,7 +263,7 @@ void settings_chooseBrightness() {
 }
 
 void settings_setBrightness(String brightness) {
-  settings_saved = false;
+  settings_changed = true;
   screenBrightness = brightness.toInt();
   M5.Display.setBrightness(255*((screenBrightness+1)/10.0));
   settings_display();
@@ -262,7 +283,7 @@ void settings_chooseStyle() {
 }
 
 void settings_setStyle(String style) {
-  settings_saved = false;
+  settings_changed = true;
   if (style == "classic") {
     dialType = DIAL_CLASSIC;
   } else {
@@ -306,7 +327,7 @@ void settings_chooseVolume() {
 }
 
 void settings_setVolume(String volume) {
-  settings_saved = false;
+  settings_changed = true;
   speakerVolume = volume.toInt();
   settings_notice();
 }
@@ -314,7 +335,7 @@ void settings_setVolume(String volume) {
 void settings_switchVibration() {
   if (modelType == 2) {
     vibration = !vibration;
-    settings_saved = false;
+    settings_changed = true;
     appUI.addRightLocaleToItem("vibration", "en", boolStr(vibration, "Enable", "Disable"));
     appUI.addRightLocaleToItem("vibration", "ja", boolStr(vibration, "有効", "無効"));
     appUI.makeUI(lang);
@@ -332,9 +353,13 @@ void settings_info() {
   appUI.setLocaleFont("ja", 1);
   appUI.setTitle("Infomation");
   appUI.addLocaleToTitle("ja", "情報");
-  appUI.addItem("basever", nothing, "Version");
+  appUI.addItem("basever", settings_touchVersion, "Version");
   appUI.addLocaleToItem("basever", "ja", "バージョン");
   appUI.addRightLocaleToItem("basever", "en", verStr);
+  appUI.addItem("mode", nothing, "Mode");
+  appUI.addLocaleToItem("mode", "ja", "モード");
+  appUI.addRightLocaleToItem("mode", "en", boolStr(developerMode, "Developer", "Normal"));
+  appUI.addRightLocaleToItem("mode", "ja", boolStr(developerMode, "開発者", "一般"));
   appUI.addItem("model", nothing, "Model");
   appUI.addLocaleToItem("model", "ja", "モデル");
   appUI.addRightLocaleToItem("model", "en", getModel(modelType));
@@ -363,6 +388,18 @@ void settings_info() {
   }
   appUI.linkFunctionToBack(settings_init);
   appUI.makeUI(lang);
+}
+
+void settings_touchVersion() {
+  versionTouchCount++;
+  if (versionTouchCount >= 7) {
+    versionTouchCount = 0;
+    developerMode = !developerMode;
+    settings_changed = true;
+    appUI.addRightLocaleToItem("mode", "en", boolStr(developerMode, "Developer", "Normal"));
+    appUI.addRightLocaleToItem("mode", "ja", boolStr(developerMode, "開発者", "一般"));
+    appUI.makeUI(lang);
+  }
 }
 
 void settings_powerChoose() {
@@ -396,7 +433,7 @@ void settings_powerChoose() {
 void settings_switchShowVoltage() {
   if (modelType == 2) {
     showVoltage = !showVoltage;
-    settings_saved = false;
+    settings_changed = true;
     appUI.addRightLocaleToItem("showvoltage", "en", boolStr(showVoltage, "Enabled", "Disabled"));
     appUI.addRightLocaleToItem("showvoltage", "ja", boolStr(showVoltage, "有効", "無効"));
     appUI.makeUI(lang);
@@ -417,7 +454,7 @@ void settings_chooseCurrent() {
 }
 
 void settings_setCurrent(String current) {
-  settings_saved = false;
+  settings_changed = true;
   if (current == "1") {
     chargeCurrent = 1;
   } else if (current == "2") {
@@ -443,7 +480,7 @@ void settings_chooseVoltage() {
 }
 
 void settings_setVoltage(String voltage) {
-  settings_saved = false;
+  settings_changed = true;
   if (voltage == "0") {
     chargeVoltage = 0;
   } else if (voltage == "1") {
@@ -538,7 +575,7 @@ void settings_setExtPower(String extMode) {
   if (extMode == "A") extSettings[settings_choseBat] = EXT_POWER_ALWAYS;
   else if (extMode == "O") extSettings[settings_choseBat] = EXT_POWER_ACTIVE;
   else if (extMode == "N") extSettings[settings_choseBat] = EXT_POWER_NEVER;
-  settings_saved = false;
+  settings_changed = true;
   settings_powerBack();
 }
 
@@ -604,13 +641,97 @@ void settings_setSleep(String slpTime) {
   uint8_t slpTimeInt = slpTime.toInt();
   sleepTimings[(settings_choseGyro*2)+settings_choseBat] = slpTimeInt;
   sleepTimings_sys[(settings_choseGyro*2)+settings_choseBat] = 60000-(slpTimeInt*1000);
-  settings_saved = false;
+  settings_changed = true;
   settings_powerBack();
 }
 
+void settings_wifi() {
+  appUI.reset();
+  appUI.setTitle("Wi-Fi Settings");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.addLocaleToTitle("ja", "Wi-Fi設定");
+  appUI.linkFunctionToBack(settings_init);
+  appUI.addItem("add", []() { 
+    wifiInitialSetup(true);
+    settings_wifi();
+    settings_wifiChanged = true;
+    appUI.rePushSprite();
+  }, "+ Add Wi-Fi");
+  appUI.addLocaleToItem("add", "ja", "+ Wi-Fiを追加");
+  appUI.setItemColor("add", TFT_GREEN);
+  for (JsonPair loopSSID : wifiJson.as<JsonObject>()) {
+    String prefixSSID = "ssid"+String(loopSSID.key().c_str());
+    appUI.addItem(prefixSSID, settings_ssid);
+    appUI.addLocaleToItem(prefixSSID, "ja", String(loopSSID.key().c_str()));
+  }
+  appUI.makeUI(lang);
+}
+
+void settings_ssid(String ssid) {
+  String trueSSID = ssid.substring(4);
+  appUI.reset();
+  appUI.setTitle(trueSSID);
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.linkFunctionToBack(settings_wifi);
+  appUI.addItem(trueSSID, settings_removeSSID, "Remove SSID");
+  appUI.addLocaleToItem(trueSSID, "ja", "SSIDを削除");
+  appUI.makeUI(lang);
+}
+
+void settings_removeSSID(String ssid) {
+  wifiJson.remove(ssid);
+  settings_wifiChanged = true;
+  settings_wifi();
+}
+
+void settings_developer() {
+  appUI.reset();
+  appUI.setTitle("Developer Settings");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.addLocaleToTitle("ja", "開発者設定");
+  appUI.linkFunctionToBack(settings_init);
+  appUI.addItem("warning", nothing, "Danger Zone: Please be careful!");
+  appUI.addLocaleToItem("warning", "ja", "危険領域：注意して進めてください！");
+  appUI.setItemColor("warning", TFT_RED);
+  appUI.addItem("resetWiFi", settings_dev_areYouSure_resetWiFi, "Reset Wi-Fi Settings");
+  appUI.addLocaleToItem("resetWiFi", "ja", "Wi-Fi設定をリセット");
+  appUI.makeUI(lang);
+}
+
+void settings_dev_areYouSure_resetWiFi() {
+  appUI.reset();
+  appUI.setTitle("Are You Sure?");
+  appUI.setLocaleFont("en", 0);
+  appUI.setLocaleFont("ja", 1);
+  appUI.addLocaleToTitle("ja", "本当に実行しますか？");
+  appUI.linkFunctionToBack(settings_developer);
+  appUI.addItem("yes", settings_dev_resetWiFi, "Yes (Reset Wi-Fi Settings)");
+  appUI.addLocaleToItem("yes", "ja", "はい（Wi-Fi設定をリセット）");
+  appUI.setItemColor("yes", TFT_ORANGE);
+  appUI.addItem("no", settings_developer, "No");
+  appUI.addLocaleToItem("no", "ja", "いいえ");
+  appUI.makeUI(lang);
+}
+
+void settings_dev_resetWiFi() {
+  wifiJson.clear();
+  LittleFS.remove("/wifi.json");
+  WiFi.disconnect(true, true);
+  settings_developer();
+}
+
 void settings_save() {
-  if (!settings_saved) {
-    settings_saved = true;
+  if ((settings_changed) || settings_wifiChanged) {
+    appUI.addRightLocaleToItem("save", "en", "Saved");
+    appUI.addRightLocaleToItem("save", "ja", "保存済み");
+    appUI.setItemRightColor("save", TFT_GREEN);
+    appUI.makeUI(lang);
+  }
+  if (settings_changed) {
+    settings_changed = false;
     Preferences pref;
     pref.begin("mk75_settings");
     pref.putString("lang", lang);
@@ -622,11 +743,13 @@ void settings_save() {
     pref.putUChar("charge", combineHex(chargeCurrent, chargeVoltage));
     pref.putUChar("hmi", (vibration << 7)+(speakerVolume*10)+screenBrightness);
     pref.putBool("showVoltage", showVoltage);
+    pref.putBool("developerMode", developerMode);
     pref.end();
-    appUI.addRightLocaleToItem("save", "en", "Saved");
-    appUI.addRightLocaleToItem("save", "ja", "保存済み");
-    appUI.setItemRightColor("save", TFT_GREEN);
-    appUI.makeUI(lang);
+    
+  }
+  if (settings_wifiChanged) {
+    writeSPIJson("/wifi.json", &wifiJson);
+    settings_wifiChanged = false;
   }
 }
 

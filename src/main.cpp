@@ -98,7 +98,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2608000; // [version]
+const uint32_t version = 2609260; // [version]
 const int32_t sizeX = 320;
 const int32_t centerX = 160;
 const int32_t sizeY = 240;
@@ -201,6 +201,7 @@ bool lowpower = false;
 bool appInit = false;
 bool touchInterrupted = false;
 bool wifiJsonAvailable = false;
+bool developerMode = false;
 
 uint8_t battery = M5.Power.getBatteryLevel();
 m5::rtc_datetime_t dateTime; // RTC日時情報 / Real-time clock date/time
@@ -871,17 +872,7 @@ void drawSystemInfo() {
   cv_day.drawString(dayName, 0, 17, &fonts::Font2); 
 }
 
-// Update digital time display (HH:MM:SS), battery indicator, and special date info
-void updateDigitals() {
-  cv_dtime_bat.clear();
-  cv_dtime_bat.setTextColor(TFT_WHITE, TFT_BLACK);
-  cv_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
-  if (M5.Power.Axp2101.isVBUS()) { cv_dtime_bat.setTextColor(CYAN, TFT_BLACK); }
-  if (showVoltage) {
-    cv_dtime_bat.drawRightString(String(battery)+"% - "+String((float) M5.Power.getBatteryVoltage()/1000, 2)+"V", sizeX, 0, &fonts::Font2);
-  } else {
-    cv_dtime_bat.drawRightString(String(battery)+"%", sizeX, 0, &fonts::Font2);
-  }
+void updateDigitalDay() {
   cv_day.clear();
   uint8_t dateY;
   bool systemInfo = (latestVer > version) || !wifiJsonAvailable;
@@ -901,12 +892,15 @@ void updateDigitals() {
       } else {
         //int32_t dayColor = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color"];
         //cv_day.setTextColor(M5.Display.color24to16(dayColor), TFT_BLACK);
-        cv_day.setTextColor(TFT_WHITE, TFT_BLACK);
+        uint16_t dayColor1 = cv_day.color24to16(spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color"]);
+        cv_day.setTextColor(dayColor1, TFT_BLACK);
         String dayName = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["name"];
         cv_day.drawString(dayName, 0, 17, &fonts::Font2);
-        uint16_t dayColor1 = cv_day.color24to16(spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color1"]);
-        uint16_t dayColor2 = cv_day.color24to16(spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color2"]);
-        gradientMask(&cv_day, 0, 17, cv_day.textWidth(dayName, &fonts::Font2), 17, dayColor1, dayColor2, TFT_WHITE);
+        if (!spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color_alt"].isNull()) {
+          uint16_t dayColor2;
+          dayColor2 = cv_day.color24to16(spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color_alt"]);
+          gradientMask(&cv_day, 0, 17, cv_day.textWidth(dayName, &fonts::Font2), 17, dayColor1, dayColor2, dayColor1);
+        }
       }
     } else if (systemInfo) {
       dateY = 0;
@@ -925,6 +919,16 @@ void updateDigitals() {
   //int32_t ramFree = (int32_t) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
   //int32_t ramTotal = (int32_t) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
   //cv_day.drawRightString((String) ((ramTotal-ramFree)/1000)+"KB/"+(String) (ramTotal/1000)+"KB "+prevLoopTime+"ms/f", sizeX, 17, &fonts::Font2);
+}
+
+// Update digital time display (HH:MM:SS), battery indicator, and special date info
+void updateDigitals() {
+  if (showVoltage) {
+    updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, M5.Power.getBatteryVoltage());
+  } else {
+    updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, 65535);
+  }
+  updateDigitalDay();
 }
 
 bool copySDtoSPI() {
@@ -969,7 +973,7 @@ bool copySDtoSPI() {
   }
 }
 
-extern void wifiInitialSetup();
+extern void wifiInitialSetup(bool cancelable);
 
 void setupConfigs() {
   M5.Display.setTextColor(SKYBLUE, TFT_BLACK);
@@ -1034,6 +1038,11 @@ void setupConfigs() {
   M5.Display.print("Loading wifi json...");
   wifiJsonAvailable = readSPIJson("/wifi.json", &wifiJson, 10000);
   M5.Display.println(successOrFail(wifiJsonAvailable));
+  if (!wifiJsonAvailable) {
+    delay(500);
+    wifiInitialSetup(false);
+    wifiJsonAvailable = true;
+  }
   M5.Display.print("Loading train json...");
   M5.Display.println(successOrFail(readSPIJson("/train.json", &trainJson, 10000)));
   M5.Display.print("Loading alarm json...");
@@ -1047,7 +1056,6 @@ void setupConfigs() {
 }
 
 void setupSprites() {
-  cv_display.createSprite(sizeX, sizeY);
   cv_clock.createSprite(221, 221);
   cv_menu.createSprite(100, 240);
   cv_ckbase.createSprite(221, 221);
@@ -1249,6 +1257,7 @@ void setup() {
   M5.Rtc.begin();
   M5.Display.init();
   dateTime = M5.Rtc.getDateTime();
+  cv_display.createSprite(sizeX, sizeY);
   setupConfigs();
   setupSprites();
   //setupMenu();
@@ -1402,7 +1411,6 @@ void loop() {
   } else {
     checkAlarmTimer += prevLoopTime;
   }
-  if (M5.Power.Axp2101.isVBUS()) wifiConsole_loop();
   if (afterSlp) {
     afterSlp = false;
   } else {
