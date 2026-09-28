@@ -1,13 +1,20 @@
 # Changelog
 Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Minor Update]`. Some months may be missing. Most updates include minor fixes that are not listed here. The versions listed below are also available from M5Burner. Other development versions are only available from GitHub.
 
+# Ver 26.9
+- Added Wi-Fi setup using WiFiManager; setup can now be completed using just a smartphone.
+- You can now register multiple Wi-Fi networks in the settings.
+- Removed Wi-Fi setup via Serial Monitor.
+- Reverted the "Special Dates" format to one that is backward-compatible with versions prior to 26.7; it is not compatible with the "Special Dates" format used in version 26.8.
+- Due to various circumstances, the CoreS3 version of V26.9 is not available via M5Burner. Please download it from GitHub or use an older version.
+
 # Ver 26.8
 - Removed the Wi-Fi setup wizard; Wi-Fi can now be configured via the serial monitor.
 - Added a "one-time" setting for alarms. Consequently, alarms disabled for both weekdays and weekends are now displayed in gray.
 - Slightly modified touch handling (implemented multi-core processing).
-- Added support for gradients to the display text for Special Dates.
+- Added support for gradients to the display text for Special Dates (Due to that, the format has changed slightly.).
 - Split the bloated source code into smaller files.
-
+- Due to various circumstances, the CoreS3 version of V26.8 is not available on M5Burner. Please download it from GitHub or use an older version.
 
 # Ver 26.7
 - Added a "Random App" feature.
@@ -70,12 +77,20 @@ Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Mi
 # 変更ログ（日本語）
 バージョン番号は`[年].[月]`または`[年].[月].[マイナーアップデート]`のように表記されます。一部の月は欠番となることがあります。ほとんどのアップデートはここに書かれていない細かなバグ修正を含みます。以下にリストアップされたバージョンはM5Burnerでも使用可能です。ほかの開発バージョンはGitHubからでのみダウンロードできます。
 
+# Ver 26.9
+- WiFiManagerを使ったWi-Fiセットアップを追加しました。スマホ1台でセットアップは完結します。
+- 設定からWi-Fiを複数登録できるようになりました。
+- シリアルモニタ経由のWi-Fiセットアップを削除しました。
+- Special Datesのフォーマットを26.7以前と後方互換性があるフォーマットに戻しました。26.8のSpecial Datesのフォーマットとは互換性がありません。
+- 諸事情により、V26.9のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+
 # Ver 26.8
 - Wi-Fiのセットアップを削除し、シリアルモニタ経由でWi-Fiを登録可能にしました。
 - アラームにワンタイム設定を追加しました。それに伴い平日休日共に無効のアラームはグレーアウトして表示されるようになりました。
 - タッチの仕様を若干変更しました。（マルチコア化）
-- Special Datesの表示テキストをグラデーションに対応させました。
+- Special Datesの表示テキストをグラデーションに対応させました（そのせいでフォーマットがやや変更になりました）。
 - 肥大化したソースコードを分割しました。
+- 諸事情により、V26.8のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
 
 # Ver 26.7
 - ランダムアプリを追加しました。

@@ -34,7 +34,6 @@ class UI {
     void setTitle(String title, const char lang[3]);
     void makeUI();
     void makeUI(const char lang[3]);
-    void rePushSprite();
     void update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat);
     void addItem(String id);
     void addItem(String id, String defName);
@@ -158,10 +157,6 @@ inline void UI::makeUI(const char lang[3]) {
     canv.drawFastHLine(0, (cnt*rowSize)+rowSize-1, width, DARKGREY);
     cnt++;
   }
-}
-
-inline void UI::rePushSprite() {
-  disp.pushSprite(0, 0, M5.Lcd.color565(16, 8, 16));
 }
 
 inline void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat) {

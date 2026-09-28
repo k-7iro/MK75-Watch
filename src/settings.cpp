@@ -656,7 +656,6 @@ void settings_wifi() {
     wifiInitialSetup(true);
     settings_wifi();
     settings_wifiChanged = true;
-    appUI.rePushSprite();
   }, "+ Add Wi-Fi");
   appUI.addLocaleToItem("add", "ja", "+ Wi-Fiを追加");
   appUI.setItemColor("add", TFT_GREEN);

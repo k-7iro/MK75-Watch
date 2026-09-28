@@ -3,8 +3,7 @@
         "1": [
             {
                 "name": "Happy New Year!",
-                "color1": 16398158,
-                "color2": 16398158
+                "color": 16398158
             }
         ]
     },
@@ -12,13 +11,13 @@
         "1": [
             {
                 "name": "You can set multiple",
-                "color1": 6487886,
-                "color2": 5082111
+                "color": 6487886,
+                "color_alt": 5082111
             },
             {
                 "name": "like this!",
-                "color1": 5082111,
-                "color2": 6487886
+                "color": 5082111,
+                "color_alt": 6487886
             }
         ]
     }
