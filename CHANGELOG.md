@@ -1,6 +1,10 @@
 # Changelog
 Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Minor Update]`. Some months may be missing. Most updates include minor fixes that are not listed here. The versions listed below are also available from M5Burner. Other development versions are only available from GitHub.
 
+# Ver 26.10
+- ZeroDial Light mode has been implemented.
+- Due to various circumstances, the CoreS3 version of V26.10 is not available via M5Burner. Please download it from GitHub or use an older version.
+
 # Ver 26.9
 - Added Wi-Fi setup using WiFiManager; setup can now be completed using just a smartphone.
 - You can now register multiple Wi-Fi networks in the settings.
@@ -76,6 +80,10 @@ Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Mi
 
 # 変更ログ（日本語）
 バージョン番号は`[年].[月]`または`[年].[月].[マイナーアップデート]`のように表記されます。一部の月は欠番となることがあります。ほとんどのアップデートはここに書かれていない細かなバグ修正を含みます。以下にリストアップされたバージョンはM5Burnerでも使用可能です。ほかの開発バージョンはGitHubからでのみダウンロードできます。
+
+# Ver 26.10
+- ZeroDial ライトモードを実装しました。
+- 諸事情により、V26.10のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
 
 # Ver 26.9
 - WiFiManagerを使ったWi-Fiセットアップを追加しました。スマホ1台でセットアップは完結します。

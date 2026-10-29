@@ -16,11 +16,11 @@ typedef void (*pFunc)(void);
 
 typedef void (*pArgFunc)(String);
 
-inline void updateDigitalTimeBat(M5Canvas* target, m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat) {
-  target->clear();
-  target->setTextColor(TFT_WHITE, TFT_BLACK);
+inline void updateDigitalTimeBat(M5Canvas* target, m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat, uint16_t textColor, uint16_t bgColor) {
+  target->clear(bgColor);
+  target->setTextColor(textColor, bgColor);
   target->drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
-  if (M5.Power.Axp2101.isVBUS()) { target->setTextColor(CYAN, TFT_BLACK); }
+  if (M5.Power.Axp2101.isVBUS()) { target->setTextColor(CYAN, bgColor); }
   if (vbat != 65535) {
     target->drawRightString(String(battery)+"% - "+String((float) vbat/1000, 2)+"V", 320, 0, &fonts::Font2);
   } else {
@@ -167,7 +167,7 @@ inline void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vb
     uint16_t cHeight = canv.height();
     uint8_t tHeight = top.height();
     uint8_t tdHeight = top_dtime_bat.height();
-    updateDigitalTimeBat(&top_dtime_bat, dateTime, battery, vbat);
+    updateDigitalTimeBat(&top_dtime_bat, dateTime, battery, vbat, TFT_WHITE, TFT_BLACK);
     top_dtime_bat.pushSprite(0, 0);
     canv.pushSprite(0, tHeight-scroll);
     top.pushSprite(0, 0);

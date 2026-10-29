@@ -31,9 +31,9 @@ void wifiInitialSetup(bool onSettings) {
   if (onSettings) {
     updateDateTimeBat();
     if (showVoltage) {
-      updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, M5.Power.getBatteryVoltage());
+      updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, M5.Power.getBatteryVoltage(), TFT_WHITE, TFT_BLACK);
     } else {
-      updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, 65535);
+      updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, 65535, TFT_WHITE, TFT_BLACK);
     }
     cv_dtime_bat.pushSprite(0, 0);
   }
@@ -46,9 +46,9 @@ void wifiInitialSetup(bool onSettings) {
     if (onSettings) {
       updateDateTimeBat();
       if (showVoltage) {
-        updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, M5.Power.getBatteryVoltage());
+        updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, M5.Power.getBatteryVoltage(), TFT_WHITE, TFT_BLACK);
       } else {
-        updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, 65535);
+        updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, 65535, TFT_WHITE, TFT_BLACK);
       }
       cv_dtime_bat.pushSprite(0, 0);
       cv_display.pushSprite(0, 0);

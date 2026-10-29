@@ -98,7 +98,7 @@ const String apps[7] = {"timer", "alarm", "stopwatch", "train", "random", "exter
 const String appsEn[7] = {"Timer", "Alarm", "Stopwatch", "TrainTime", "Random", "Ext.Device", "Settings"};
 const String appsJa[7] = {"タイマー", "アラーム", "ストップWt", "交通時刻表", "ランダム", "外部デバイス", "設定"};
 const uint8_t howManyApps = 7;
-const uint32_t version = 2609000; // [version]
+const uint32_t version = 2610000; // [version]
 const int32_t sizeX = 320;
 const int32_t centerX = 160;
 const int32_t sizeY = 240;
@@ -496,8 +496,17 @@ void syncTime() {
 void notice(String title, String time) {
   M5.Display.wakeup();
   M5.Display.setBrightness(255*((screenBrightness+1)/10.0));
-  M5.Display.clear();
-  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+  uint16_t textColor;
+  uint16_t bgColor;
+  if (dialType == DIAL_ZERODIAL_LIGHT) {
+    textColor = TFT_BLACK;
+    bgColor = TFT_WHITE;
+  } else {
+    textColor = TFT_WHITE;
+    bgColor = TFT_BLACK;
+  }
+  M5.Display.clear(bgColor);
+  M5.Display.setTextColor(textColor, bgColor);
   M5.Display.drawCenterString("Touch to Stop", sizeX/2, (sizeY/2)+50, &fonts::Font4);
   M5.Display.drawCenterString(time, sizeX/2, sizeY/2, &fonts::Font6);
   M5.Display.drawCenterString(title, sizeX/2, (sizeY/2)-50, &fonts::Font4);
@@ -738,44 +747,59 @@ void makeClockBase() {
   uint16_t col2; //時針の色
   uint16_t col3; //目盛の色
   uint16_t col4; //目盛の色
+  uint16_t bgColor; //背景色
   cv_ckbase_digit.createSprite(221, 221);
-  cv_ckbase.clear(TFT_BLACK);
-  cv_ckhhand.clear(TFT_BLACK);
-  cv_ckmhand.clear(TFT_BLACK);
   if (dialType == DIAL_CLASSIC) {
     col0 = TFT_WHITE;
     col1 = TFT_SKYBLUE;
     col2 = TFT_DARKCYAN;
+    bgColor = TFT_BLACK;
+    cv_ckbase.clear(TFT_BLACK);
     drawCircleWithAA(&cv_ckbase, ckCenterX, ckCenterY, 110, TFT_WHITE, TFT_BLACK);
     drawCircleWithAA(&cv_ckbase, ckCenterX, ckCenterY, 105, TFT_BLACK, TFT_WHITE);
   } else {
-    col0 = M5.Display.color565(170, 170, 170);
-    col1 = M5.Display.color565(170, 170, 170);
-    col2 = M5.Display.color565(170, 170, 170);
-    col3 = M5.Display.color565(100, 100, 100);
-    col4 = M5.Display.color565(20, 20, 20);
+    if (dialType == DIAL_ZERODIAL) {
+      col0 = M5.Display.color565(170, 170, 170);
+      col1 = M5.Display.color565(170, 170, 170);
+      col2 = M5.Display.color565(170, 170, 170);
+      col3 = M5.Display.color565(100, 100, 100);
+      col4 = M5.Display.color565(20, 20, 20);
+      bgColor = TFT_BLACK;
+      cv_ckbase.clear(TFT_BLACK);
+    } else if (dialType == DIAL_ZERODIAL_LIGHT) {
+      col0 = M5.Display.color565(70, 70, 70);
+      col1 = M5.Display.color565(70, 70, 70);
+      col2 = M5.Display.color565(70, 70, 70);
+      col3 = M5.Display.color565(150, 150, 150);
+      col4 = M5.Display.color565(240, 240, 240);
+      bgColor = TFT_WHITE;
+      cv_ckbase.clear(TFT_WHITE);
+    }
     for (int8_t i = 0; i < 60; i++) {
       cv_ckbase.drawGradientLine((sin(i*0.105)*98)+ckCenterX, (cos(i*0.105)*98)+ckCenterY, (sin(i*0.105)*104)+ckCenterX, (cos(i*0.105)*104)+ckCenterY, col4, col3);
     }
   }
+  cv_ckbase_digit.clear(bgColor);
   float deg;
   for (int8_t i = 0; i < 12; i++) {
     deg = i*0.523;
     cv_ckbase_digit.setFont(&fonts::Font4);
-    cv_ckbase_digit.setTextColor(col0, TFT_BLACK);
+    cv_ckbase_digit.setTextColor(col0, bgColor);
     cv_ckbase_digit.setTextSize(1);
     if (i == 6) {
       cv_ckbase_digit.drawCenterString("12", (sin(deg)*90)+ckCenterX, (cos(deg)*90)+ckCenterY-10);
     } else if (i % 3 == 0) {
       cv_ckbase_digit.drawCenterString(String(12-((i+6)%12)), (sin(deg)*90)+ckCenterX, (cos(deg)*90)+ckCenterY-10);
     } else if (dialType == DIAL_ZERODIAL) {
-      drawCircleWithAA(&cv_ckbase, (sin(deg)*90)+ckCenterX, (cos(deg)*90)+ckCenterY, 3, col0, TFT_BLACK);
+      drawCircleWithAA(&cv_ckbase, (sin(deg)*90)+ckCenterX, (cos(deg)*90)+ckCenterY, 3, col0, bgColor);
     } else {
       thickLine(&cv_ckbase, (sin(deg)*97)+ckCenterX, (cos(deg)*97)+ckCenterY, (sin(deg)*106)+ckCenterX, (cos(deg)*106)+ckCenterY, col0);
     }
   }
-  cv_ckbase_digit.pushSprite(0, 0, TFT_BLACK);
+  cv_ckbase_digit.pushSprite(0, 0, bgColor);
   cv_ckbase_digit.deleteSprite();
+  cv_ckhhand.clear(bgColor);
+  cv_ckmhand.clear(bgColor);
   cv_ckhhand.fillRect(0, 0, 7, 63, col2);
   cv_ckhhand.fillTriangle(3, 69, 0, 63, 6, 63, col2);
   cv_ckmhand.fillRect(0, 0, 5, 100, col1);
@@ -843,8 +867,8 @@ extern void edev_loop();
 void updateClock() {
   cv_ckbase.pushSprite(&cv_clock, 0, 0);
   uint8_t arcSize;
-  if (dialType == DIAL_ZERODIAL) arcSize = 20;
-  else arcSize = 108;
+  if (dialType == DIAL_CLASSIC) arcSize = 108;
+  else arcSize = 20;
   if (M5.Power.Axp2101.isVBUS()) {
     cv_clock.fillArc(ckCenterX, ckCenterY, arcSize+1, arcSize, 270, (battery*3.6)-90.5, CYAN);
   } else {
@@ -873,7 +897,16 @@ void drawSystemInfo() {
 }
 
 void updateDigitalDay() {
-  cv_day.clear();
+  uint16_t textColor;
+  uint16_t bgColor;
+  if (dialType == DIAL_ZERODIAL_LIGHT) {
+    textColor = TFT_BLACK;
+    bgColor = TFT_WHITE;
+  } else {
+    textColor = TFT_WHITE;
+    bgColor = TFT_BLACK;
+  }
+  cv_day.clear(bgColor);
   uint8_t dateY;
   bool systemInfo = (latestVer > version) || !wifiJsonAvailable;
   if (!spDatesJson[String(dateTime.date.month)].isNull()) {
@@ -888,12 +921,13 @@ void updateDigitalDay() {
         }
       }
       if (birthChangeID == birthdayCount) {
+        cv_day.setTextColor(textColor, bgColor);
         drawSystemInfo();
       } else {
         //int32_t dayColor = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color"];
         //cv_day.setTextColor(M5.Display.color24to16(dayColor), TFT_BLACK);
         uint16_t dayColor1 = cv_day.color24to16(spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color"]);
-        cv_day.setTextColor(dayColor1, TFT_BLACK);
+        cv_day.setTextColor(dayColor1, bgColor);
         String dayName = spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["name"];
         cv_day.drawString(dayName, 0, 17, &fonts::Font2);
         if (!spDatesJson[String(dateTime.date.month)][String(dateTime.date.date)][birthChangeID]["color_alt"].isNull()) {
@@ -914,7 +948,7 @@ void updateDigitalDay() {
   } else {
     dateY = 17;
   }
-  cv_day.setTextColor(TFT_WHITE, TFT_BLACK);
+  cv_day.setTextColor(textColor, bgColor);
   cv_day.drawString(String(dateTime.date.month)+"/"+String(dateTime.date.date)+" "+week[dateTime.date.weekDay]+" "+dateTime.date.year, 0, dateY, &fonts::Font2);
   //int32_t ramFree = (int32_t) (heap_caps_get_free_size(MALLOC_CAP_8BIT));
   //int32_t ramTotal = (int32_t) (heap_caps_get_total_size(MALLOC_CAP_8BIT));
@@ -923,10 +957,19 @@ void updateDigitalDay() {
 
 // Update digital time display (HH:MM:SS), battery indicator, and special date info
 void updateDigitals() {
-  if (showVoltage) {
-    updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, M5.Power.getBatteryVoltage());
+  uint16_t textColor;
+  uint16_t bgColor;
+  if (dialType == DIAL_ZERODIAL_LIGHT) {
+    textColor = TFT_BLACK;
+    bgColor = TFT_WHITE;
   } else {
-    updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, 65535);
+    textColor = TFT_WHITE;
+    bgColor = TFT_BLACK;
+  }
+  if (showVoltage) {
+    updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, M5.Power.getBatteryVoltage(), textColor, bgColor);
+  } else {
+    updateDigitalTimeBat(&cv_dtime_bat, dateTime, battery, 65535, textColor, bgColor);
   }
   updateDigitalDay();
 }
@@ -1068,13 +1111,23 @@ void setupSprites() {
 
 // Draw application menu with app icons and names (vertical scrollable list)
 void drawMenu() {
-  cv_menu.clear();
+  uint16_t textColor;
+  uint16_t bgColor;
+  if (dialType == DIAL_ZERODIAL_LIGHT) {
+    textColor = TFT_BLACK;
+    bgColor = TFT_WHITE;
+  } else {
+    textColor = TFT_WHITE;
+    bgColor = TFT_BLACK;
+  }
+  cv_menu.clear(bgColor);
   for (int8_t i = 0; i < howManyApps; i++) {
     if (inLimit(i*120, screenSwipeVertical-220, screenSwipeVertical+220)) {
       // パフォーマンス重視ならfillRoundRectではなくfillRectを使うべきかもしれない
-      cv_menu.fillRoundRect(105-screenSwipe, (i*120)+75-screenSwipeVertical, 90, 90, 5, WHITE);
-      cv_menu.fillRoundRect(110-screenSwipe, (i*120)+80-screenSwipeVertical, 80, 80, 4, BLACK);
+      cv_menu.fillRoundRect(105-screenSwipe, (i*120)+75-screenSwipeVertical, 90, 90, 5, textColor);
+      // cv_menu.fillRoundRect(110-screenSwipe, (i*120)+80-screenSwipeVertical, 80, 80, 4, BLACK);
       cv_menu.pushImage(110-screenSwipe, (i*120)+80-screenSwipeVertical, 80, 80, icons[i]);
+      cv_menu.setTextColor(textColor, bgColor);
       if (strcmp(lang, "ja") == 0) {
         cv_menu.drawCenterString(appsJa[i], 150-screenSwipe, (i*120)+170-screenSwipeVertical, &fonts::efontJA_16);
       } else if (strcmp(lang, "en") == 0) {
@@ -1290,6 +1343,15 @@ void loop() {
   doDraw = true;
   bool touch = (M5.Touch.getCount() > 0);
   bool powered = M5.Power.Axp2101.isVBUS();
+  uint16_t textColor;
+  uint16_t bgColor;
+  if (dialType == DIAL_ZERODIAL_LIGHT) {
+    textColor = TFT_BLACK;
+    bgColor = TFT_WHITE;
+  } else {
+    textColor = TFT_WHITE;
+    bgColor = TFT_BLACK;
+  }
   if (doSleep[powered]) {
     loopSleep();
   } else {
@@ -1319,7 +1381,11 @@ void loop() {
     }
     updateExtOutput(true, powered);
   }
-  cv_display.clear();
+  if (dialType == DIAL_ZERODIAL_LIGHT) {
+    cv_display.clear(TFT_WHITE);
+  } else {
+    cv_display.clear(TFT_BLACK);
+  }
   wasVBUS = powered;
   updateDateTimeBat();
   if (M5.BtnB.wasPressed()) {
@@ -1380,15 +1446,15 @@ void loop() {
     // アプリサイドバーの開閉
     updateClock();
     updateDigitals();
-    cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
+    cv_dtime_bat.pushSprite(&cv_display, 0, 0, bgColor);
     if (screenSwipe != 0) {
       drawMenu();
     }
-    cv_clock.pushSprite(&cv_display, centerX-ckCenterX-round(screenSwipe/2), centerY-ckCenterY, TFT_BLACK);
-    cv_day.pushSprite(&cv_display, 0, sizeY-34, TFT_BLACK);
-    cv_dtime_bat.pushSprite(&cv_display, 0, 0, TFT_BLACK);
+    cv_clock.pushSprite(&cv_display, centerX-ckCenterX-round(screenSwipe/2), centerY-ckCenterY, bgColor);
+    cv_day.pushSprite(&cv_display, 0, sizeY-34, bgColor);
+    cv_dtime_bat.pushSprite(&cv_display, 0, 0, bgColor);
     if (screenSwipe != 0) {
-      cv_menu.pushSprite(&cv_display, 220, 0, TFT_BLACK);
+      cv_menu.pushSprite(&cv_display, 220, 0, bgColor);
     }
     if (doDraw) cv_display.pushSprite(0, 0);
     if ((screenSwipe == 0 || (screenSwipe == 100 && screenSwipeVertical%120 == 0)) && doDraw && !touch) {

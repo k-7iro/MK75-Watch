@@ -44,7 +44,8 @@ typedef enum {
 // 時計盤デザインタイプ / Dial type for clock display
 typedef enum {
   DIAL_ZERODIAL = 0,
-  DIAL_CLASSIC = 1
+  DIAL_CLASSIC = 1,
+  DIAL_ZERODIAL_LIGHT = 2
 } dialtype_t;
 
 // 基本セット

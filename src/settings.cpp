@@ -242,8 +242,12 @@ void settings_display() {
   if (dialType == DIAL_CLASSIC) {
     appUI.addRightLocaleToItem("style", "en", "Classic");
     appUI.addRightLocaleToItem("style", "ja", "クラシック");
+  } else if (dialType == DIAL_ZERODIAL) {
+    appUI.addRightLocaleToItem("style", "en", "ZeroDial Dark");
+    appUI.addRightLocaleToItem("style", "ja", "ZeroDial ダーク");
   } else {
-    appUI.addRightLocaleToItem("style", "en", "ZeroDial");
+    appUI.addRightLocaleToItem("style", "en", "ZeroDial Light (Beta)");
+    appUI.addRightLocaleToItem("style", "ja", "ZeroDial ライト (ベータ)");
   }
   appUI.makeUI(lang);
 }
@@ -277,7 +281,10 @@ void settings_chooseStyle() {
   appUI.addLocaleToTitle("ja", "文字盤のスタイル");
   appUI.addItem("classic", settings_setStyle, "Classic");
   appUI.addLocaleToItem("classic", "ja", "クラシック");
-  appUI.addItem("zerodial", settings_setStyle, "ZeroDial");
+  appUI.addItem("zerodial", settings_setStyle, "ZeroDial Dark");
+  appUI.addLocaleToItem("zerodial", "ja", "ZeroDial ダーク");
+  appUI.addItem("zerodial_light", settings_setStyle, "ZeroDial Light (Beta)");
+  appUI.addLocaleToItem("zerodial_light", "ja", "ZeroDial ライト (ベータ)");
   appUI.linkFunctionToBack(settings_display);
   appUI.makeUI(lang);
 }
@@ -286,8 +293,10 @@ void settings_setStyle(String style) {
   settings_changed = true;
   if (style == "classic") {
     dialType = DIAL_CLASSIC;
-  } else {
+  } else if (style == "zerodial") {
     dialType = DIAL_ZERODIAL;
+  } else if (style == "zerodial_light") {
+    dialType = DIAL_ZERODIAL_LIGHT;
   }
   makeClockBase();
   settings_init();
