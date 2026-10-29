@@ -16,13 +16,25 @@ typedef void (*pFunc)(void);
 
 typedef void (*pArgFunc)(String);
 
+inline void updateDigitalTimeBat(M5Canvas* target, m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat, uint16_t textColor, uint16_t bgColor) {
+  target->clear(bgColor);
+  target->setTextColor(textColor, bgColor);
+  target->drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
+  if (M5.Power.Axp2101.isVBUS()) { target->setTextColor(CYAN, bgColor); }
+  if (vbat != 65535) {
+    target->drawRightString(String(battery)+"% - "+String((float) vbat/1000, 2)+"V", 320, 0, &fonts::Font2);
+  } else {
+    target->drawRightString(String(battery)+"%", 320, 0, &fonts::Font2);
+  }
+}
+
 class UI {
   public:
     void setTitle(String title);
     void setTitle(String title, const char lang[3]);
     void makeUI();
     void makeUI(const char lang[3]);
-    void update(m5::rtc_datetime_t dateTime, uint8_t battery);
+    void update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat);
     void addItem(String id);
     void addItem(String id, String defName);
     void addItem(String id, String defName, String defLang);
@@ -35,8 +47,8 @@ class UI {
     void addLocaleToItem(String id, const char lang[3], String name);
     void addRightLocaleToItem(String id, const char lang[3], String name);
     void addLocaleToTitle(const char lang[3], String name);
-    void setItemColor(String id, uint32_t color);
-    void setItemRightColor(String id, uint32_t color);
+    void setItemColor(String id, uint16_t color);
+    void setItemRightColor(String id, uint16_t color);
     void setLocaleFont(const char lang[3], uint8_t font);
     void linkFunctionToBack(pFunc func);
     void linkFunctionToItem(String id, pFunc func);
@@ -54,12 +66,13 @@ class UI {
     int scrollCount;
     const int space = 20;
     bool transparentMode = false;
+    uint8_t firstTouch = 3;
     pFunc backFunction;
     std::list<String> items;
     std::map<String, std::map<String, String>> itemLocale;
     std::map<String, std::map<String, String>> itemRightLocale;
-    std::map<String, uint32_t> itemColor;
-    std::map<String, uint32_t> itemRightColor;
+    std::map<String, uint16_t> itemColor;
+    std::map<String, uint16_t> itemRightColor;
     std::map<String, pFunc> itemFunction;
     std::map<String, pArgFunc> itemArgFunction;
     std::map<String, bool> itemUseArgFunction;
@@ -71,19 +84,19 @@ class UI {
     M5Canvas top_dtime_bat = M5Canvas(&top);
 };
 
-void UI::setTitle(String title) {
+inline void UI::setTitle(String title) {
   titleLocale["en"] = title;
 }
 
-void UI::setTitle(String title, const char lang[3]) {
+inline void UI::setTitle(String title, const char lang[3]) {
   titleLocale[lang] = title;
 }
 
-void UI::makeUI() {
+inline void UI::makeUI() {
   makeUI("en");
 }
 
-void UI::makeUI(const char lang[3]) {
+inline void UI::makeUI(const char lang[3]) {
   int width = M5.Display.width();
   int height = M5.Display.height();
   int UIHeight;
@@ -146,176 +159,179 @@ void UI::makeUI(const char lang[3]) {
   }
 }
 
-void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery) {
-  uint8_t rowSize = (space*2)+26;
-  uint16_t height = M5.Display.height();
-  uint16_t width = M5.Display.width();
-  uint16_t cHeight = canv.height();
-  uint8_t tHeight = top.height();
-  uint8_t tdHeight = top_dtime_bat.height();
-  top_dtime_bat.clear(BLACK);
-  top_dtime_bat.setTextColor(WHITE, BLACK);
-  top_dtime_bat.drawString(forceDigits(dateTime.time.hours, 2)+":"+forceDigits(dateTime.time.minutes, 2)+" "+forceDigits(dateTime.time.seconds, 2), 0, 0, &fonts::Font2);
-  if (M5.Power.Axp2101.isVBUS()) { top_dtime_bat.setTextColor(CYAN, BLACK); }
-  top_dtime_bat.drawRightString(String(battery)+"%", width, 0, &fonts::Font2);
-  top_dtime_bat.pushSprite(0, 0);
-  canv.pushSprite(0, tHeight-scroll);
-  top.pushSprite(0, 0);
-  disp.pushSprite(0, 0, M5.Lcd.color565(16, 8, 16));
-  if (M5.BtnA.wasPressed()) {
-    backFunction();
-  } else if (M5.Touch.getCount() > 0) {
-    auto detail = M5.Touch.getDetail();
-    if (detail.y < 240) {
-      if (firstX == -1) {
-        firstX = detail.x;
-        firstY = detail.y;
-      }
-      uint8_t accelArrSize = (sizeof(scrollAccel)/sizeof(int16_t));
-      if (prevY != -1) {
-        for (int i = 0; i < accelArrSize-1; i++) {
-          scrollAccel[i] = scrollAccel[i+1];
+inline void UI::update(m5::rtc_datetime_t dateTime, uint8_t battery, uint16_t vbat) {
+  if (firstTouch == 0) {
+    uint8_t rowSize = (space*2)+26;
+    uint16_t height = M5.Display.height();
+    uint16_t width = M5.Display.width();
+    uint16_t cHeight = canv.height();
+    uint8_t tHeight = top.height();
+    uint8_t tdHeight = top_dtime_bat.height();
+    updateDigitalTimeBat(&top_dtime_bat, dateTime, battery, vbat, TFT_WHITE, TFT_BLACK);
+    top_dtime_bat.pushSprite(0, 0);
+    canv.pushSprite(0, tHeight-scroll);
+    top.pushSprite(0, 0);
+    disp.pushSprite(0, 0, M5.Lcd.color565(16, 8, 16));
+    if (M5.BtnA.wasPressed()) {
+      backFunction();
+    } else if (M5.Touch.getCount() > 0) {
+      auto detail = M5.Touch.getDetail();
+      if (detail.y < 240) {
+        if (firstX == -1) {
+          firstX = detail.x;
+          firstY = detail.y;
         }
-        scrollAccel[accelArrSize-1] = prevY-detail.y;
-        scroll += scrollAccel[accelArrSize-1];
-        scrollCount += scrollAccel[accelArrSize-1];
-      }
-      prevX = detail.x;
-      prevY = detail.y;
-    }
-  } else {
-    scrollAccel[0] = floor(scrollAccel[0]*0.8);
-    scroll += scrollAccel[0];
-    if (prevX != -1) {
-      if (64 >= prevY && prevY > 16) {
-        if (prevX <= 34) {
-          backFunction();
+        uint8_t accelArrSize = (sizeof(scrollAccel)/sizeof(int16_t));
+        if (prevY != -1) {
+          for (int i = 0; i < accelArrSize-1; i++) {
+            scrollAccel[i] = scrollAccel[i+1];
+          }
+          scrollAccel[accelArrSize-1] = prevY-detail.y;
+          scroll += scrollAccel[accelArrSize-1];
+          scrollCount += scrollAccel[accelArrSize-1];
         }
-      } else {
-        int touched = floor((prevY+scroll)/rowSize)-1;
-        if (scrollCount == 0 && items.size() > touched && touched >= 0) {
-          String touchedID = *std::next(items.begin(), touched);
-          if (itemUseArgFunction[touchedID]) {
-            itemArgFunction[touchedID](touchedID);
-          } else {
-            itemFunction[touchedID]();
+        prevX = detail.x;
+        prevY = detail.y;
+      }
+    } else {
+      scrollAccel[0] = floor(scrollAccel[0]*0.8);
+      scroll += scrollAccel[0];
+      if (prevX != -1) {
+        if (64 >= prevY && prevY > 16) {
+          if (prevX <= 34) {
+            backFunction();
+          }
+        } else {
+          int touched = floor((prevY+scroll)/rowSize)-1;
+          if (scrollCount == 0 && items.size() > touched && touched >= 0) {
+            String touchedID = *std::next(items.begin(), touched);
+            if (itemUseArgFunction[touchedID]) {
+              itemArgFunction[touchedID](touchedID);
+            } else {
+              itemFunction[touchedID]();
+            }
           }
         }
       }
+      prevX = -1;
+      prevY = -1;
+      firstX = -1;
+      firstY = -1;
+      scrollCount = 0;
     }
-    prevX = -1;
-    prevY = -1;
-    firstX = -1;
-    firstY = -1;
-    scrollCount = 0;
-  }
-  if (scroll < 0) {
-    scroll = 0;
-  } else if (scroll > cHeight-height+tHeight) {
-    scroll = cHeight-height+tHeight;
+    if (scroll < 0) {
+      scroll = 0;
+    } else if (scroll > cHeight-height+tHeight) {
+      scroll = cHeight-height+tHeight;
+    }
+  } else if (M5.Touch.getCount() == 0) {
+    firstTouch--;
+  } else {
+    firstTouch = 3;
   }
 }
 
-void UI::addItem(String id) {
+inline void UI::addItem(String id) {
   addItem(id, id);
 }
 
-void UI::addItem(String id, String defName) {
+inline void UI::addItem(String id, String defName) {
   addItem(id, defName, "en");
 }
 
-void UI::addItem(String id, String defName, String defLang) {
+inline void UI::addItem(String id, String defName, String defLang) {
   items.push_back(id);
   itemLocale[id][defLang] = defName;
   itemRightLocale[id][defLang] = "";
-  itemColor[id] = 16777215;
-  itemRightColor[id] = 16776960;
+  itemColor[id] = TFT_WHITE;
+  itemRightColor[id] = TFT_YELLOW;
   itemUseArgFunction[id] = false;
 }
 
-void UI::addItem(String id, pFunc func) {
+inline void UI::addItem(String id, pFunc func) {
   addItem(id);
   itemFunction[id] = func;
 }
 
-void UI::addItem(String id, pFunc func, String defName) {
+inline void UI::addItem(String id, pFunc func, String defName) {
   addItem(id, defName);
   itemFunction[id] = func;
 }
 
-void UI::addItem(String id, pFunc func, String defName, String defLang) {
+inline void UI::addItem(String id, pFunc func, String defName, String defLang) {
   addItem(id, defName, defLang);
   itemFunction[id] = func;
 }
 
-void UI::addItem(String id, pArgFunc func) {
+inline void UI::addItem(String id, pArgFunc func) {
   addItem(id);
   itemArgFunction[id] = func;
   itemUseArgFunction[id] = true;
 }
 
-void UI::addItem(String id, pArgFunc func, String defName) {
+inline void UI::addItem(String id, pArgFunc func, String defName) {
   addItem(id, defName);
   itemArgFunction[id] = func;
   itemUseArgFunction[id] = true;
 }
 
-void UI::addItem(String id, pArgFunc func, String defName, String defLang) {
+inline void UI::addItem(String id, pArgFunc func, String defName, String defLang) {
   addItem(id, defName, defLang);
   itemArgFunction[id] = func;
   itemUseArgFunction[id] = true;
 }
 
-void UI::addLocaleToItem(String id, const char lang[3], String name) {
+inline void UI::addLocaleToItem(String id, const char lang[3], String name) {
   itemLocale[id][lang] = name;
 }
 
-void UI::addRightLocaleToItem(String id, const char lang[3], String name) {
+inline void UI::addRightLocaleToItem(String id, const char lang[3], String name) {
   itemRightLocale[id][lang] = name;
 }
 
-void UI::addLocaleToTitle(const char lang[3], String name) {
+inline void UI::addLocaleToTitle(const char lang[3], String name) {
   titleLocale[lang] = name;
 }
 
-void UI::setItemColor(String id, uint32_t color) {
+inline void UI::setItemColor(String id, uint16_t color) {
   itemColor[id] = color;
 }
 
-void UI::setItemRightColor(String id, uint32_t color) {
+inline void UI::setItemRightColor(String id, uint16_t color) {
   itemRightColor[id] = color;
 }
 
-void UI::setLocaleFont(const char lang[3], uint8_t font) {
+inline void UI::setLocaleFont(const char lang[3], uint8_t font) {
   localeFont[lang] = font;
 }
 
-void UI::linkFunctionToBack(pFunc func) {
+inline void UI::linkFunctionToBack(pFunc func) {
   backFunction = func;
 }
 
-void UI::linkFunctionToItem(String id, pFunc func) {
+inline void UI::linkFunctionToItem(String id, pFunc func) {
   itemFunction[id] = func;
 }
 
-void UI::linkArgFunctionToItem(String id, pArgFunc func) {
+inline void UI::linkArgFunctionToItem(String id, pArgFunc func) {
   itemArgFunction[id] = func;
 }
 
-void UI::setUseArgFunctionToItem(String id, bool useArgFunction) {
+inline void UI::setUseArgFunctionToItem(String id, bool useArgFunction) {
   itemUseArgFunction[id] = useArgFunction;
 }
 
-void UI::setTransparentMode(bool mode) {
+inline void UI::setTransparentMode(bool mode) {
   transparentMode = mode;
 }
 
-void UI::reset() {
+inline void UI::reset() {
   scroll = 0;
   scrollAccel[0] = 0;
   scrollAccel[1] = 0;
   scrollAccel[2] = 0;
   transparentMode = false;
+  firstTouch = 3;
   backFunction = nothing;
   items.clear();
   itemLocale.clear();

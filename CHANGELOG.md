@@ -1,12 +1,52 @@
 # Changelog
 Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Minor Update]`. Some months may be missing. Most updates include minor fixes that are not listed here. The versions listed below are also available from M5Burner. Other development versions are only available from GitHub.
 
+# Ver 26.10
+- ZeroDial Light mode has been implemented.
+- Due to various circumstances, the CoreS3 version of V26.10 is not available via M5Burner. Please download it from GitHub or use an older version.
+
+# Ver 26.9
+- Added Wi-Fi setup using WiFiManager; setup can now be completed using just a smartphone.
+- You can now register multiple Wi-Fi networks in the settings.
+- Removed Wi-Fi setup via Serial Monitor.
+- Reverted the "Special Dates" format to one that is backward-compatible with versions prior to 26.7; it is not compatible with the "Special Dates" format used in version 26.8.
+- Due to various circumstances, the CoreS3 version of V26.9 is not available via M5Burner. Please download it from GitHub or use an older version.
+
+# Ver 26.8
+- Removed the Wi-Fi setup wizard; Wi-Fi can now be configured via the serial monitor.
+- Added a "one-time" setting for alarms. Consequently, alarms disabled for both weekdays and weekends are now displayed in gray.
+- Slightly modified touch handling (implemented multi-core processing).
+- Added support for gradients to the display text for Special Dates (Due to that, the format has changed slightly.).
+- Split the bloated source code into smaller files.
+- Due to various circumstances, the CoreS3 version of V26.8 is not available on M5Burner. Please download it from GitHub or use an older version.
+
+# Ver 26.7
+- Added a "Random App" feature.
+- Updated the update detection mechanism to support HTTPS and fixed a bug that prevented updates from being received.
+- Fixed a bug that prevented navigation back from certain settings screens.
+- Added a setting to toggle the display of battery voltage.
+- Due to various circumstances, the CoreS3 version of V26.7 is not available on M5Burner. Please download it from GitHub or use an older version.
+
+# Ver 26.6
+- You can now set the volume and vibration settings for alarm and timer notifications.
+- You can now change the display brightness in the settings.
+- You can now set the maximum charging current and maximum charging voltage from the settings.
+- Due to various circumstances, the CoreS3 version of V26.6 is not available on M5Burner. Please download it from GitHub or use an older version.
+
+# Ver 26.5
+- Reduced power consumption by partially putting the ESP32 into light sleep mode.
+- The ZeroDial design has been slightly adjusted.
+- Sleep and wake functions can now be activated with a short press of the power button.
+- Notifications are now displayed when an update is available.
+- Due to various circumstances, the CoreS3 version of V26.5 is not available on M5Burner. Please download it from GitHub or use an older version.
+
 # Ver 26.4.1
 - Added a new theme, "ZeroDial," experimentally. You can revert to the traditional watch face style in the settings.
 - Fixed a bug where automatic time setting would enter an infinite loop when connecting to Wi-Fi.
 - Fixed a bug where setting the time would sometimes prevent the next alarm from sounding.
 - Fixed a bug where initial settings were not applied after Wi-Fi setup.
-- Due to various circumstances, the CoreS3 version of V26.4.1 is not available on M5Burner. Please download it from GitHub or use an older version.
+- ~~Due to various circumstances, the CoreS3 version of V26.4.1 is not available on M5Burner. Please download it from GitHub or use an older version.~~
+- For some reason, the M5Burner version was not available regardless of whether it was Core2 or CoreS3.
 
 # Ver 26.4
 - You can now configure the sleep time and external port power output in the settings.
@@ -41,12 +81,52 @@ Update version numbers are in the format `[Year].[Month]` or `[Year].[Month].[Mi
 # 変更ログ（日本語）
 バージョン番号は`[年].[月]`または`[年].[月].[マイナーアップデート]`のように表記されます。一部の月は欠番となることがあります。ほとんどのアップデートはここに書かれていない細かなバグ修正を含みます。以下にリストアップされたバージョンはM5Burnerでも使用可能です。ほかの開発バージョンはGitHubからでのみダウンロードできます。
 
+# Ver 26.10
+- ZeroDial ライトモードを実装しました。
+- 諸事情により、V26.10のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+
+# Ver 26.9
+- WiFiManagerを使ったWi-Fiセットアップを追加しました。スマホ1台でセットアップは完結します。
+- 設定からWi-Fiを複数登録できるようになりました。
+- シリアルモニタ経由のWi-Fiセットアップを削除しました。
+- Special Datesのフォーマットを26.7以前と後方互換性があるフォーマットに戻しました。26.8のSpecial Datesのフォーマットとは互換性がありません。
+- 諸事情により、V26.9のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+
+# Ver 26.8
+- Wi-Fiのセットアップを削除し、シリアルモニタ経由でWi-Fiを登録可能にしました。
+- アラームにワンタイム設定を追加しました。それに伴い平日休日共に無効のアラームはグレーアウトして表示されるようになりました。
+- タッチの仕様を若干変更しました。（マルチコア化）
+- Special Datesの表示テキストをグラデーションに対応させました（そのせいでフォーマットがやや変更になりました）。
+- 肥大化したソースコードを分割しました。
+- 諸事情により、V26.8のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+
+# Ver 26.7
+- ランダムアプリを追加しました。
+- アップデート検知がHTTPSに対応し、アップデートを受け取れないバグを修正しました。
+- 設定の一部項目にて戻ることができないバグを修正しました。
+- 電池電圧の表示のオンオフを設定で変更できるようになりました。
+- 諸事情により、V26.7のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+
+# Ver 26.6
+- アラームやタイマーの通知のボリューム及び振動の有無が設定できるようになりました。
+- ディスプレイの輝度を設定で変更できるようになりました。
+- 設定から最大充電電流と最大充電電圧を設定できるようになりました。
+- 諸事情により、V26.6のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+
+# Ver 26.5
+- ESP32を部分的にライトスリープさせることにより消費電力の削減を図りました。
+- ZeroDialのデザインが微調整されました。
+- 電源ボタンの短押しでスリープ及びスリープ解除ができるようになりました。
+- アップデートが来た時に通知が来るようになりました。
+- 諸事情により、V26.5のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+
 # Ver 26.4.1
 - 試験的に新しいテーマ「ZeroDial」を追加しました。設定で従来スタイルの文字盤に戻せます。
 - 自動時刻合わせで、Wi-Fiの接続で無限ループに入ってしまうバグを修正しました。
 - 時刻設定をすると次のアラームが鳴らないことがあるバグを修正しました。
 - Wi-Fiセットアップ後に初期設定が反映されないバグを修正しました。
-- 諸事情により、V26.4.1のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。
+- ~~諸事情により、V26.4.1のCoreS3バージョンはM5Burnerで提供できません。GitHubからダウンロードするか古いバージョンを使用してください。~~
+- なぜかCore2、CoreS3関係なくM5Burner版の提供はありませんでした。
 
 # Ver 26.4
 - 設定でスリープするまでの時間や外部ポートの電源出力を設定できるようになりました。
